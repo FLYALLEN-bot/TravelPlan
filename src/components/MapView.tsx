@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useMemo, useRef } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import type { SelectedLocation, ItineraryData, RouteStop } from '../types/itinerary';
@@ -11,6 +11,7 @@ interface MapViewProps {
   selectedLocation: SelectedLocation | null;
   itineraryData: ItineraryData | null;
   hoveredTimeSlot: string | null;
+  focusedTimeSlot: string | null;
   routeVersion: number;
   routeLoading: boolean;
   onLocationSelect: (location: SelectedLocation) => void;
@@ -37,42 +38,29 @@ function MapController({ center }: { center: [number, number] | null }) {
   return null;
 }
 
-function RouteFocusController({ routeStops, hoveredTimeSlot }: {
+function RouteFocusController({ routeStops, focusedTimeSlot }: {
   routeStops: RouteStop[];
-  hoveredTimeSlot: string | null;
+  focusedTimeSlot: string | null;
 }) {
   const map = useMap();
-  const prevHovered = useRef<string | null>(null);
-
-  // All-stops bounds for returning on mouse leave
-  const allBounds = useMemo(() => {
-    if (routeStops.length === 0) return null;
-    return L.latLngBounds(routeStops.map((s) => [s.lat, s.lon] as [number, number])).pad(0.15);
-  }, [routeStops]);
 
   useEffect(() => {
-    if (hoveredTimeSlot === prevHovered.current || routeStops.length === 0) return;
-    prevHovered.current = hoveredTimeSlot;
+    if (!focusedTimeSlot || routeStops.length === 0) return;
 
-    if (hoveredTimeSlot) {
-      const stops = routeStops.filter((s) => s.timeSlot === hoveredTimeSlot);
-      if (stops.length === 0) return;
-      if (stops.length === 1) {
-        map.flyTo([stops[0].lat, stops[0].lon], 15, { duration: 0.7 });
-      } else {
-        const bounds = L.latLngBounds(stops.map((s) => [s.lat, s.lon] as [number, number]));
-        map.flyToBounds(bounds.pad(0.2), { duration: 0.7 });
-      }
-    } else if (prevHovered.current && allBounds) {
-      // Mouse left — return to overview
-      map.flyToBounds(allBounds, { duration: 0.8 });
+    const stops = routeStops.filter((s) => s.timeSlot === focusedTimeSlot);
+    if (stops.length === 0) return;
+    if (stops.length === 1) {
+      map.flyTo([stops[0].lat, stops[0].lon], 15, { duration: 0.7 });
+    } else {
+      const bounds = L.latLngBounds(stops.map((s) => [s.lat, s.lon] as [number, number]));
+      map.flyToBounds(bounds.pad(0.2), { duration: 0.7 });
     }
-  }, [hoveredTimeSlot, routeStops, map, allBounds]);
+  }, [focusedTimeSlot, routeStops, map]);
 
   return null;
 }
 
-export function MapView({ selectedLocation, itineraryData, hoveredTimeSlot, routeVersion, routeLoading, onLocationSelect }: MapViewProps) {
+export function MapView({ selectedLocation, itineraryData, hoveredTimeSlot, focusedTimeSlot, routeVersion, routeLoading, onLocationSelect }: MapViewProps) {
   const handleMapClick = useCallback(
     (latlng: L.LatLng) => {
       const { lat, lng: lon } = latlng;
@@ -103,7 +91,7 @@ export function MapView({ selectedLocation, itineraryData, hoveredTimeSlot, rout
         attributionControl={false}
       >
         <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
         />
         <MapClickHandler onClick={handleMapClick} />
@@ -123,19 +111,22 @@ export function MapView({ selectedLocation, itineraryData, hoveredTimeSlot, rout
             />
             <RouteFocusController
               routeStops={itineraryData.routeStops || []}
-              hoveredTimeSlot={hoveredTimeSlot}
+              focusedTimeSlot={focusedTimeSlot}
             />
           </>
         )}
-        {/* Route loading indicator */}
+        {/* Route loading indicator — centered on map */}
         {routeLoading && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[1000] glass-strong rounded-xl px-4 py-2.5 shadow-lg flex items-center gap-2.5 animate-fadeInUp">
-            <div className="flex gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-teal/50 animate-bounce" style={{ animationDelay: '0ms' }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-teal/50 animate-bounce" style={{ animationDelay: '150ms' }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-teal/50 animate-bounce" style={{ animationDelay: '300ms' }} />
+          <div className="absolute inset-0 z-[1000] flex items-center justify-center pointer-events-none">
+            <div className="glass-panel rounded-2xl px-10 py-8 shadow-2xl flex flex-col items-center gap-5 animate-scaleIn border-[rgba(255,255,255,0.08)]">
+              <svg className="w-12 h-12 text-amber animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182" />
+              </svg>
+              <div className="text-center">
+                <p className="text-[18px] font-display font-semibold text-void">路线加载中...</p>
+                <p className="text-[14px] text-muted mt-1.5">正在查询地点坐标</p>
+              </div>
             </div>
-            <span className="text-[13px] text-muted font-body">路线加载中...</span>
           </div>
         )}
       </MapContainer>

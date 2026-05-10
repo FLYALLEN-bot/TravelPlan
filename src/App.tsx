@@ -3,7 +3,7 @@ import { MapView } from './components/MapView';
 import { ItineraryPanel } from './components/ItineraryPanel';
 import { PlaceConfirmDialog } from './components/PlaceConfirmDialog';
 import { ApiKeyModal } from './components/ApiKeyModal';
-import { AIChatDialog } from './components/AIChatDialog';
+import { InlineChatBar } from './components/InlineChatBar';
 import type { AppState, AppAction, SelectedLocation, ItineraryData, ChatMessage } from './types/itinerary';
 import { generateItinerarySafe, hasApiKey } from './api/anthropic';
 import { enrichItineraryWithCoordinates } from './utils/formatItinerary';
@@ -15,6 +15,7 @@ const initialState: AppState = {
   error: null,
   showConfirm: false,
   hoveredTimeSlot: null,
+  focusedTimeSlot: null,
   showChat: false,
   chatMessages: [],
   chatLoading: false,
@@ -40,6 +41,8 @@ function reducer(state: AppState, action: AppAction): AppState {
       return { ...initialState, itineraryData: null };
     case 'HOVER_TIME_SLOT':
       return { ...state, hoveredTimeSlot: action.payload };
+    case 'FOCUS_TIME_SLOT':
+      return { ...state, focusedTimeSlot: action.payload };
     case 'TOGGLE_CHAT':
       return { ...state, showChat: action.payload, chatMessages: action.payload ? state.chatMessages : [] };
     case 'ADD_CHAT_MESSAGE':
@@ -81,14 +84,12 @@ export default function App() {
         state.selectedLocation.lat,
         state.selectedLocation.lon
       );
-      // Show panel immediately, route loading in background
       dispatch({ type: 'SET_ITINERARY', payload: { ...data, routeStops: [...(data.routeStops || [])] } });
       dispatch({ type: 'SET_ROUTE_LOADING', payload: true });
 
       const { lat, lon } = state.selectedLocation;
       enrichItineraryWithCoordinates(data, lat, lon).then((enriched) => {
         if (mountedRef.current) {
-          console.log('[Geocoding] done, routeStops:', enriched.routeStops.length, 'stops');
           dispatch({ type: 'SET_ITINERARY', payload: { ...enriched, routeStops: [...enriched.routeStops] } });
         }
       }).catch((err) => {
@@ -115,8 +116,10 @@ export default function App() {
   const handleTimeSlotHover = useCallback((timeSlot: string | null) => {
     dispatch({ type: 'HOVER_TIME_SLOT', payload: timeSlot });
   }, []);
+  const handleTimeSlotFocus = useCallback((timeSlot: string | null) => {
+    dispatch({ type: 'FOCUS_TIME_SLOT', payload: timeSlot });
+  }, []);
 
-  // Chat handlers
   const handleToggleChat = useCallback((open: boolean) => {
     dispatch({ type: 'TOGGLE_CHAT', payload: open });
   }, []);
@@ -129,27 +132,54 @@ export default function App() {
     dispatch({ type: 'SET_CHAT_LOADING', payload: loading });
   }, []);
 
-  const handleApplyChatItinerary = useCallback(async (data: ItineraryData) => {
-    // Geocode the new itinerary before applying
+  const handleApplyChatItinerary = useCallback((data: ItineraryData) => {
     if (!state.selectedLocation) return;
+    dispatch({ type: 'TOGGLE_CHAT', payload: false });
+    dispatch({ type: 'RETRY' });
+    dispatch({ type: 'SET_ROUTE_LOADING', payload: true });
+
     const { lat, lon } = state.selectedLocation;
-    const enriched = await enrichItineraryWithCoordinates(data, lat, lon);
-    if (mountedRef.current) {
-      dispatch({ type: 'SET_ITINERARY', payload: { ...enriched, routeStops: [...enriched.routeStops] } });
-    }
+    enrichItineraryWithCoordinates(data, lat, lon).then((enriched) => {
+      if (mountedRef.current) {
+        dispatch({ type: 'SET_ITINERARY', payload: { ...enriched, routeStops: [...enriched.routeStops] } });
+      }
+    }).catch((err) => {
+      console.warn('[Geocoding] failed:', err);
+      if (mountedRef.current) {
+        dispatch({ type: 'SET_ITINERARY', payload: { ...data, routeStops: [] } });
+      }
+    });
   }, [state.selectedLocation]);
 
   return (
-    <div className="flex h-full w-full">
-      <div className="flex-1 min-w-0 relative">
-        <MapView
-          selectedLocation={state.selectedLocation}
-          itineraryData={state.itineraryData}
-          hoveredTimeSlot={state.hoveredTimeSlot}
-          routeVersion={state.routeVersion}
-          routeLoading={state.routeLoading}
-          onLocationSelect={handleLocationSelect}
-        />
+    <div className="flex h-full w-full bg-[#09090b]">
+      {/* Map area with inline chat */}
+      <div className="flex-1 min-w-0 relative flex flex-col">
+        <div className="flex-1 relative">
+          <MapView
+            selectedLocation={state.selectedLocation}
+            itineraryData={state.itineraryData}
+            hoveredTimeSlot={state.hoveredTimeSlot}
+            focusedTimeSlot={state.focusedTimeSlot}
+            routeVersion={state.routeVersion}
+            routeLoading={state.routeLoading}
+            onLocationSelect={handleLocationSelect}
+          />
+        </div>
+
+        {/* Inline AI chat bar at bottom of map */}
+        {state.itineraryData && (
+          <InlineChatBar
+            itineraryData={state.itineraryData}
+            messages={state.chatMessages}
+            loading={state.chatLoading}
+            expanded={state.showChat}
+            onToggle={(open) => handleToggleChat(open)}
+            onSend={handleChatSend}
+            onSetLoading={handleChatSetLoading}
+            onApplyItinerary={handleApplyChatItinerary}
+          />
+        )}
       </div>
 
       <ItineraryPanel
@@ -161,6 +191,7 @@ export default function App() {
         onRetry={handleRetry}
         onReset={handleReset}
         onTimeSlotHover={handleTimeSlotHover}
+        onTimeSlotFocus={handleTimeSlotFocus}
         onOpenChat={() => handleToggleChat(true)}
       />
 
@@ -176,19 +207,6 @@ export default function App() {
         <ApiKeyModal
           onClose={() => setShowApiKeyModal(false)}
           onKeySet={handleApiKeySet}
-        />
-      )}
-
-      {state.showChat && state.itineraryData && (
-        <AIChatDialog
-          open={state.showChat}
-          messages={state.chatMessages}
-          loading={state.chatLoading}
-          itineraryData={state.itineraryData}
-          onClose={() => handleToggleChat(false)}
-          onSend={handleChatSend}
-          onSetLoading={handleChatSetLoading}
-          onApplyItinerary={handleApplyChatItinerary}
         />
       )}
     </div>

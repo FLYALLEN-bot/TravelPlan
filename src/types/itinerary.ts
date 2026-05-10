@@ -14,6 +14,7 @@ export interface Activity {
   lat?: number;
   lon?: number;
   transport?: string;
+  notFound?: boolean;
 }
 
 export interface TimeSlotData {
@@ -68,6 +69,7 @@ export interface AppState {
   error: string | null;
   showConfirm: boolean;
   hoveredTimeSlot: string | null;
+  focusedTimeSlot: string | null;
   showChat: boolean;
   chatMessages: ChatMessage[];
   chatLoading: boolean;
@@ -84,6 +86,7 @@ export type AppAction =
   | { type: 'RETRY' }
   | { type: 'RESET' }
   | { type: 'HOVER_TIME_SLOT'; payload: string | null }
+  | { type: 'FOCUS_TIME_SLOT'; payload: string | null }
   | { type: 'TOGGLE_CHAT'; payload: boolean }
   | { type: 'ADD_CHAT_MESSAGE'; payload: ChatMessage }
   | { type: 'SET_CHAT_LOADING'; payload: boolean }

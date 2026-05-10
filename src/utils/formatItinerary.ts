@@ -47,23 +47,6 @@ function extractRouteStops(data: Record<string, unknown>, timeRanges: Record<str
     });
   }
 
-  // Photo spots that have coordinates
-  if (Array.isArray(data.photoSpots)) {
-    const spots = data.photoSpots as Array<Record<string, unknown>>;
-    spots.forEach((s) => {
-      if (typeof s.lat === 'number' && typeof s.lon === 'number') {
-        stops.push({
-          name: String(s.name || ''),
-          lat: s.lat,
-          lon: s.lon,
-          time: '',
-          timeSlot: 'photo',
-          transport: '',
-        });
-      }
-    });
-  }
-
   return stops;
 }
 
@@ -155,6 +138,10 @@ export async function enrichItineraryWithCoordinates(
       found++;
       console.log(`[Geocoding] ✓ ${item.name} → ${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)}`);
     } else {
+      if (item.slotKey !== 'photo') {
+        const key = item.slotKey as typeof slotKeys[number];
+        data[key].activities[item.index].notFound = true;
+      }
       console.warn(`[Geocoding] ✗ ${item.name} — not found`);
     }
   }
