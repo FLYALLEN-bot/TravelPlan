@@ -1,163 +1,118 @@
 # TravelPlan — AI 旅行攻略生成器
 
-> 在地图上点一下，AI 帮你生成一日旅行攻略。小红书风格，出片打卡 + 美食推荐 + 实用贴士。
-
-**在线体验**：克隆后本地运行，无需 API Key 即可使用（支持浏览器内设置 DeepSeek API Key）。
-
----
-
-## 功能特点
-
-- **地图选点** — 点击地图任意位置，或搜索中文地名，自动逆地理编码获取地址
-- **AI 智能规划** — 调用 DeepSeek 大模型，生成小红书风格的完整一日行程
-- **5 个时段安排** — 上午 / 午餐 / 下午 / 晚餐 / 晚间，每个时段 2-3 个地点
-- **路线可视化** — 所有地点以编号标记展示在地图上，连线形成完整路线
-- **打卡推荐** — AI 推荐最佳拍照点，附带拍摄技巧
-- **出行贴士** — 交通建议 + 小红书热门笔记
-- **AI 对话修改** — 地图底部内嵌聊天栏，可以直接对话让 AI 调整行程（换餐厅、加景点等）
-- **暗色高级 UI** — Luxe Noir 设计风格，大屏桌面端优化，中文排版友好
-- **完全免费** — 地图使用 OpenStreetMap（无需 Key），地理编码使用 Nominatim（免费）
-
----
+暗色主题大屏旅行规划工具。在地图上点击或搜索目的地，AI 自动生成小红书风格的多日旅行攻略，包含时段安排、路线绘制、打卡点推荐与实景图片。
 
 ## 技术栈
 
-| 类别 | 技术 |
+| 层级 | 技术 |
 |---|---|
-| 框架 | React 19 + TypeScript |
+| 框架 | React 19 + TypeScript 6 |
 | 构建 | Vite 8 |
-| 样式 | Tailwind CSS 4（CSS-based `@theme`） |
-| 地图 | Leaflet + react-leaflet v5（CartoDB 暗色瓦片） |
-| AI | DeepSeek API（OpenAI 兼容，JSON mode） |
-| 地理编码 | Nominatim（OpenStreetMap 免费 API） |
-| 字体 | Noto Sans SC / Noto Serif SC / Playfair Display |
-
----
+| 样式 | Tailwind CSS 4（CSS-based `@theme` 配置） |
+| 地图 | 高德地图 JS API 2.0（`@amap/amap-jsapi-loader`） |
+| AI | DeepSeek API（OpenAI 兼容格式，JSON 结构化输出） |
+| 搜索/地理编码 | 高德 Web 服务端 REST API |
+| 图片 | Unsplash API + 高德 POI 图片（级联回退） |
+| 字体 | Noto Sans SC / Noto Serif SC / Playfair Display（Google Fonts） |
 
 ## 快速开始
 
-### 1. 克隆项目
+### 1. 克隆并安装
 
 ```bash
 git clone git@github.com:FLYALLEN-bot/TravelPlan.git
 cd TravelPlan
-```
-
-### 2. 安装依赖
-
-```bash
 npm install
 ```
 
-### 3. 配置 API Key（二选一）
+### 2. 配置 API Key
 
-**方式 A：环境变量（推荐）**
-
-```bash
-cp .env.example .env
-```
-
-编辑 `.env` 文件，填入你的 DeepSeek API Key：
-
-```
-VITE_DEEPSEEK_API_KEY=sk-your-key-here
-```
-
-> 前往 [platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys) 获取 Key。
-
-**方式 B：浏览器内设置**
-
-首次打开应用时，如果未检测到环境变量中的 Key，会自动弹出设置面板。在输入框中粘贴 Key 即可（仅保存在浏览器本地）。
-
-### 4. 启动开发服务器
+复制 `.env.example` 为 `.env`，填入以下 Key：
 
 ```bash
-npm run dev
+VITE_DEEPSEEK_API_KEY=sk-your-deepseek-key    # DeepSeek AI（必需）
+VITE_AMAP_JS_KEY=your-amap-js-key             # 高德 Web端 JS API — 地图显示（必需）
+VITE_AMAP_WS_KEY=your-amap-ws-key             # 高德 Web服务端 — 搜索/地理编码/POI 图片（必需）
+VITE_UNSPLASH_ACCESS_KEY=your-unsplash-key    # Unsplash 图片（可选，无 Key 时显示渐变占位）
 ```
 
-浏览器访问 `http://localhost:5173`。
+> **高德 Key 说明**：JS API Key 需在控制台开通「Web端(JS API)」服务；Web 服务端 Key 需开通「Web服务 API」。两者可以相同（同一应用开通两种服务），也可以分开。详见 [高德开放平台](https://lbs.amap.com/)。
 
-### 5. 生产构建
+### 3. 启动开发服务器
 
 ```bash
-npm run build
-npm run preview
+npm run dev        # 启动 → http://localhost:5173
 ```
 
----
+### 4. 生产构建
 
-## 使用指南
+```bash
+npm run build      # TypeScript 类型检查 + Vite 构建
+npm run preview    # 本地预览生产版本
+```
 
-### 基本流程
+## 使用方式
 
-1. **选目的地** — 在地图上点击任意位置，或使用顶部搜索栏输入中文地名（如「杭州西湖」）
-2. **确认地点** — 弹出确认框，显示逆地理编码后的地址名称和坐标，点击「生成一日攻略」
-3. **查看攻略** — 右侧面板展示完整一日行程，包含 5 个时段、打卡推荐、出行贴士和热门笔记
-4. **地图联动** — 将鼠标悬停在侧栏任一时段卡片上，地图上对应地点会放大高亮；点击卡片则地图飞行到该时段区域
-
-### AI 对话修改
-
-攻略生成后，地图下方会出现输入栏，显示「想要什么让AI修改~~~」：
-
-- 点击输入栏展开聊天面板
-- 输入修改需求（如「把午餐换成火锅」「下午加一个博物馆」）
-- AI 会分析你的需求并返回修改后的行程
-- 点击「应用此修改」即可更新右侧面板和地图路线
-
-### 地点匹配说明
-
-AI 生成的地点名称会通过 Nominatim 地理编码服务查询真实坐标（限定在目的地 80km 范围内）。如果某个地点在附近找不到匹配，右侧面板该地点会标注 **（未匹配到该地址）**，且不会在地图上显示标记点。
-
----
+1. **选择目的地**：在地图上点击任意位置，或使用左上角搜索框输入地名
+2. **确认并选择天数**：弹窗确认地点名称，选择行程天数（1-7 天）
+3. **查看攻略**：右侧面板展示每天的时段安排、出行贴士、打卡推荐（含实景图片）
+4. **交互地图**：点击地图上的编号标记查看地点详情；点击时段卡片聚焦对应区域
+5. **AI 修改**：底部输入框与 AI 对话，调整行程内容
 
 ## 项目结构
 
 ```
-TravelPlan/
-├── index.html                          # 入口 HTML（字体 CDN 引入）
-├── .env.example                        # 环境变量模板
-├── src/
-│   ├── main.tsx                        # React 入口
-│   ├── App.tsx                         # 核心状态管理 (useReducer)
-│   ├── index.css                       # Tailwind @theme 设计系统
-│   ├── types/
-│   │   └── itinerary.ts               # TypeScript 类型定义
-│   ├── api/
-│   │   ├── anthropic.ts               # DeepSeek API 封装
-│   │   └── nominatim.ts               # 地理编码（5 层回退 + 距离过滤）
-│   ├── hooks/
-│   │   ├── useItinerary.ts            # AI 生成状态机
-│   │   └── useDebounce.ts             # 搜索防抖
-│   ├── components/
-│   │   ├── MapView.tsx                # Leaflet 地图容器
-│   │   ├── SearchBar.tsx              # 地名搜索自动补全
-│   │   ├── RouteOverlay.tsx           # 路线折线 + 编号标记
-│   │   ├── ItineraryPanel.tsx         # 右侧攻略面板
-│   │   ├── TimeSlot.tsx               # 单个时段卡片
-│   │   ├── PhotoSpotBadge.tsx         # 打卡点徽章
-│   │   ├── InlineChatBar.tsx          # 地图底部 AI 对话栏
-│   │   ├── PlaceConfirmDialog.tsx     # 确认目的地弹窗
-│   │   ├── ApiKeyModal.tsx            # API Key 设置弹窗
-│   │   ├── ErrorBanner.tsx            # 错误提示组件
-│   │   └── ItinerarySkeleton.tsx      # 加载骨架屏
-│   └── utils/
-│       ├── iconFactory.ts             # Leaflet 自定义图钉
-│       └── formatItinerary.ts         # AI 响应解析 + 坐标丰富
+src/
+├── api/
+│   ├── amap.ts            # 高德 JS API 加载器
+│   ├── amapRest.ts        # 高德 Web 服务端 REST API（搜索/地理编码/POI 图片）
+│   ├── amapGeocoder.ts    # 地理编码策略编排（city+name → context+name → name）
+│   ├── anthropic.ts       # DeepSeek AI 行程生成（多日 JSON 格式）
+│   └── unsplash.ts        # 打卡点图片（高德 POI → Unsplash 级联回退）
+├── components/
+│   ├── AMapView.tsx       # 高德地图容器（暗色主题、SVG 标记、路线绘制）
+│   ├── ItineraryPanel.tsx # 右侧攻略面板（天切换标签、时段卡片、贴士）
+│   ├── TimeSlot.tsx       # 时段卡片组件
+│   ├── PhotoSpotBadge.tsx # 打卡点卡片（实景图片 / 渐变占位）
+│   ├── SearchBar.tsx      # 浮动搜索栏（REST API 自动补全）
+│   ├── PlaceConfirmDialog.tsx  # 地点确认 + 天数选择弹窗
+│   ├── InlineChatBar.tsx       # 底部 AI 对话栏
+│   ├── ApiKeyModal.tsx         # API Key 设置弹窗
+│   ├── ErrorBanner.tsx         # 错误提示横幅
+│   └── ItinerarySkeleton.tsx   # 加载骨架屏
+├── types/
+│   ├── itinerary.ts       # 核心类型（MultiDayItinerary, DayPlan, RouteStop 等）
+│   └── amap.d.ts          # 高德 JS API 2.0 类型声明
+├── utils/
+│   └── formatItinerary.ts  # AI 响应解析、地理编码充实、回退行程生成
+├── App.tsx                 # 根组件（useReducer 全局状态管理）
+├── index.css               # Tailwind @theme 设计系统 + 全局样式
+└── main.tsx                # 入口
 ```
 
----
+## 数据流
 
-## 设计系统
+```
+地图点击 / 搜索选择
+  → reverse geocode（高德 REST）获取地名
+  → PlaceConfirmDialog 确认 + 选择天数
+  → DeepSeek API（JSON mode，生成 N 天行程）
+  → parseItineraryResponse → dispatch SET_ITINERARY（面板立刻显示）
+  → 后台并行：
+     a. enrichItineraryWithCoordinates（高德地理编码所有活动地点）
+     b. fetchAllPhotoImages（高德 POI → Unsplash 获取打卡图片）
+  → 每次 enrich 完成 dispatch SET_ITINERARY（地图路线更新）
+```
 
-采用 **Luxe Noir** 暗色主题：
+## 设计特点
 
-- **底色**：`#09090b` → `#121217` → `#1a1a24` 三层递进
-- **强调色**：Amber `#f59e0b`（按钮、高亮、路线、图钉）
-- **辅助色**：Rose `#fb7185`、Teal `#2dd4bf`、Indigo `#818cf8`
-- **排版**：Noto Sans SC（正文）+ Playfair Display / Noto Serif SC（标题）
-- **效果**：毛玻璃面板（`backdrop-filter: blur(24px)`）、琥珀色辉光动画、微妙的白色半透明边框
-
----
+- **暗色 Luxe Noir 主题**：全局暗色配色，地图暗色风格，微妙的边框光效
+- **中文排版友好**：Noto Sans SC + Noto Serif SC 字体组合，适合中文阅读
+- **SVG 描边标记**：地图标记使用 `paint-order: stroke fill` 保证文字清晰可读
+- **多源图片回退**：打卡点图片高德 POI → Unsplash → 渐变占位
+- **NaN 全链路防御**：所有地图坐标操作前 `isFinite()` 校验，防止黑屏崩溃
+- **智能地理编码**：AI 输出 city + address 字段，多策略级联提升编码精度
+- **多日行程**：支持 1-7 天行程生成，天切换标签实时更换地图路线
 
 ## License
 
