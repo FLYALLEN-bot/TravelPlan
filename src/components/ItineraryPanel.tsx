@@ -184,7 +184,7 @@ export function ItineraryPanel({
   };
 
   return (
-    <div className="w-[540px] min-w-[540px] h-full glass-panel border-l border-border shadow-[-8px_0_40px_rgba(0,0,0,0.3)] overflow-hidden flex flex-col">
+    <div className="relative z-10 w-[540px] min-w-[540px] h-full glass-panel border-l border-border shadow-[-8px_0_40px_rgba(0,0,0,0.3)] overflow-hidden flex flex-col" style={{ isolation: 'isolate' }}>
       {/* Panel header */}
       <div className="shrink-0 px-7 py-3.5 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-3">

@@ -182,7 +182,7 @@ export function AMapView({
     routePolyRef.current = route;
 
     // Info window — offset downward so it stays visible when marker near top edge
-    const iw = new AM.InfoWindow({ offset: new AM.Pixel(0, -24), isCustom: true });
+    const iw = new AM.InfoWindow({ offset: new AM.Pixel(0, -8), isCustom: true, zIndex: 9999 });
     infoWindowRef.current = iw;
 
     // Stop markers — SVG content with stroked text for perfect readability
@@ -227,13 +227,31 @@ export function AMapView({
 
         // InfoWindow
         iw.setContent(
-          `<div style="font-family:'Noto Sans SC',system-ui,sans-serif;font-size:13px;min-width:170px;color:#d6d3d1;">
-            <h4 style="font-family:'Noto Serif SC',serif;font-weight:600;font-size:15px;color:#fafaf9;margin:0 0 6px;">${s.name}</h4>
-            ${s.time ? `<p style="color:#a1a1aa;font-size:12px;margin:0 0 4px;"><span style="font-weight:600;color:rgba(250,250,249,0.7);">时间</span> ${s.time}</p>` : ''}
-            ${s.transport ? `<p style="color:#a1a1aa;font-size:12px;margin:0;"><span style="font-weight:600;color:rgba(250,250,249,0.7);">交通</span> ${s.transport}</p>` : ''}
+          `<div data-iw style="position:relative;background:#FF6A00;border:1px solid #000000;border-radius:8px;padding:12px;min-width:170px;box-shadow:0 4px 20px rgba(0,0,0,0.4);z-index:9999;">
+            <h4 style="font-family:'Noto Sans SC',system-ui,sans-serif;font-weight:800;font-size:15px;color:#000000;margin:0 0 6px;padding:0;text-shadow:0 1px 0 rgba(255,255,255,0.3);">${s.name}</h4>
+            ${s.time ? `<p style="color:#000000;font-size:12px;margin:0 0 4px;font-weight:700;text-shadow:0 1px 0 rgba(255,255,255,0.3);"><span style="font-weight:800;">时间</span> ${s.time}</p>` : ''}
+            ${s.transport ? `<p style="color:#000000;font-size:12px;margin:0;font-weight:700;text-shadow:0 1px 0 rgba(255,255,255,0.3);"><span style="font-weight:800;">交通</span> ${s.transport}</p>` : ''}
+            <div style="position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:8px solid #FF6A00;"></div>
           </div>`
         );
         iw.open(map, [s.lon, s.lat]);
+
+        // Ensure InfoWindow wrapper stays on top within the map, without leaking to layout containers
+        setTimeout(() => {
+          const el = document.querySelector('[data-iw]');
+          if (!el) return;
+          // Only touch the custom content and its immediate AMap wrapper (max 3 levels)
+          let p: HTMLElement | null = el as HTMLElement;
+          for (let depth = 0; depth < 3 && p; depth++) {
+            p.style.zIndex = '9999';
+            p = p.parentElement;
+            // Never touch body/html — they must not participate in map-internal stacking
+            if (!p || p === document.body || p === document.documentElement) break;
+            // Never touch full-viewport overlays (likely AMap panes, not InfoWindow wrappers)
+            const rect = p.getBoundingClientRect();
+            if (rect.width >= window.innerWidth * 0.9 && rect.height >= window.innerHeight * 0.9) break;
+          }
+        }, 0);
       });
 
       marker.setMap(map);
@@ -294,7 +312,7 @@ export function AMapView({
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       {/* Map container */}
-      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      <div ref={containerRef} data-map-root style={{ width: '100%', height: '100%', overflow: 'hidden', isolation: 'isolate' }} />
 
       {/* SDK loading */}
       {!mapReady && !mapError && (
