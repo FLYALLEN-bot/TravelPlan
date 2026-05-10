@@ -1,11 +1,53 @@
+import { useState } from 'react';
 import type { PhotoSpot } from '../types/itinerary';
 
 interface PhotoSpotBadgeProps { spot: PhotoSpot; index: number; }
 
+const gradients = [
+  'from-amber-soft via-amber-glow to-[#1a1a24]',
+  'from-teal-soft via-teal/10 to-[#1a1a24]',
+  'from-rose-soft via-rose/10 to-[#1a1a24]',
+  'from-indigo-400/10 via-indigo-400/5 to-[#1a1a24]',
+];
+
 export function PhotoSpotBadge({ spot, index }: PhotoSpotBadgeProps) {
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const [imgError, setImgError] = useState(false);
+
+  const gradient = gradients[index % gradients.length];
+
   return (
     <div className="animate-fadeInUp" style={{ animationDelay: `${index * 100}ms` }}>
       <div className="glass-card rounded-xl overflow-hidden hover:shadow-[0_4px_20px_rgba(245,158,11,0.06)] transition-all duration-300">
+        {/* Image area */}
+        <div className="relative w-full h-44 overflow-hidden">
+          {spot.imageUrl && !imgError ? (
+            <>
+              {!imgLoaded && (
+                <div className={`absolute inset-0 bg-gradient-to-br ${gradient} animate-pulse`} />
+              )}
+              <img
+                src={spot.imageUrl}
+                alt={spot.name}
+                onLoad={() => setImgLoaded(true)}
+                onError={() => setImgError(true)}
+                className={`w-full h-full object-cover transition-opacity duration-500 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
+                loading="lazy"
+              />
+            </>
+          ) : (
+            <div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center`}>
+              <svg className="w-14 h-14 text-white/[0.08]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </div>
+          )}
+          {/* Bottom gradient overlay for readability */}
+          <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#1a1a24]/90 to-transparent pointer-events-none" />
+        </div>
+
+        {/* Content */}
         <div className="flex">
           <div className="w-1 bg-amber/35 shrink-0" />
           <div className="flex-1 p-4.5">

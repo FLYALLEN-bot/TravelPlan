@@ -1,29 +1,69 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { SelectedLocation } from '../types/itinerary';
-import { searchLocations } from '../api/nominatim';
-import type { SearchResult } from '../api/nominatim';
+import { inputTips } from '../api/amapRest';
 import { useDebounce } from '../hooks/useDebounce';
 
 interface SearchBarProps { onLocationSelect: (location: SelectedLocation) => void; }
 
+interface TipItem {
+  name: string;
+  address: string;
+  district: string;
+  lng: number;
+  lat: number;
+  id: string;
+}
+
 export function SearchBar({ onLocationSelect }: SearchBarProps) {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SearchResult[]>([]);
+  const [results, setResults] = useState<TipItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [highlightIndex, setHighlightIndex] = useState(-1);
   const [isSearching, setIsSearching] = useState(false);
-  const debouncedQuery = useDebounce(query, 400);
+  const debouncedQuery = useDebounce(query, 300);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!debouncedQuery.trim()) { setResults([]); setIsOpen(false); return; }
-    let cancelled = false;
+    const q = debouncedQuery.trim();
+    if (!q) {
+      setResults([]);
+      setIsOpen(false);
+      return;
+    }
+
     setIsSearching(true);
-    searchLocations(debouncedQuery, { viewbox: '73,18,135,54' }).then((data) => {
-      if (!cancelled) { setResults(data); setIsOpen(data.length > 0); setHighlightIndex(-1); setIsSearching(false); }
-    });
-    return () => { cancelled = true; };
+    console.log('[Search] inputTips:', q);
+
+    inputTips(q)
+      .then((tips) => {
+        console.log('[Search] results:', tips.length);
+        if (tips.length > 0) {
+          const items: TipItem[] = tips.map((t) => {
+            const [lng, lat] = t.location.split(',').map(Number);
+            return {
+              name: t.name,
+              address: t.address || '',
+              district: t.district || '',
+              lng,
+              lat,
+              id: t.id || `${t.name}-${t.location}`,
+            };
+          });
+          setResults(items);
+          setIsOpen(true);
+          setHighlightIndex(-1);
+        } else {
+          setResults([]);
+          setIsOpen(false);
+        }
+        setIsSearching(false);
+      })
+      .catch(() => {
+        setResults([]);
+        setIsOpen(false);
+        setIsSearching(false);
+      });
   }, [debouncedQuery]);
 
   useEffect(() => {
@@ -34,9 +74,14 @@ export function SearchBar({ onLocationSelect }: SearchBarProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const selectResult = useCallback((result: SearchResult) => {
-    onLocationSelect({ lat: result.lat, lon: result.lon, displayName: result.displayName });
-    setQuery(result.displayName); setIsOpen(false); inputRef.current?.blur();
+  const selectResult = useCallback((tip: TipItem) => {
+    const displayName = tip.district
+      ? `${tip.district} ${tip.name}`
+      : tip.name;
+    onLocationSelect({ lat: tip.lat, lon: tip.lng, displayName });
+    setQuery(tip.name);
+    setIsOpen(false);
+    inputRef.current?.blur();
   }, [onLocationSelect]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -81,8 +126,8 @@ export function SearchBar({ onLocationSelect }: SearchBarProps) {
 
         {isOpen && results.length > 0 && (
           <ul className="absolute top-full mt-2 left-0 right-0 glass-panel rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.5)] max-h-72 overflow-y-auto scrollbar-thin animate-fadeIn border-[rgba(255,255,255,0.08)]">
-            {results.map((result, index) => (
-              <li key={`${result.lat}-${result.lon}`} onClick={() => selectResult(result)}
+            {results.map((tip, index) => (
+              <li key={tip.id || `${tip.name}-${index}`} onClick={() => selectResult(tip)}
                 onMouseEnter={() => setHighlightIndex(index)}
                 className={`px-5 py-3.5 cursor-pointer text-[16px] border-b border-border last:border-b-0 transition-colors
                   ${index === highlightIndex ? 'bg-amber-soft text-amber font-medium' : 'text-void hover:bg-white/[0.02]'}`}>
@@ -91,7 +136,12 @@ export function SearchBar({ onLocationSelect }: SearchBarProps) {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
-                  <span className="line-clamp-2 leading-snug">{result.displayName}</span>
+                  <div>
+                    <span className="line-clamp-1 leading-snug font-medium">{tip.name}</span>
+                    {tip.address && (
+                      <span className="block text-[13px] text-muted mt-0.5 line-clamp-1">{tip.address}</span>
+                    )}
+                  </div>
                 </div>
               </li>
             ))}

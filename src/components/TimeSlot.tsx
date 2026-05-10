@@ -5,8 +5,7 @@ interface TimeSlotProps {
   color: 'gold' | 'terracotta' | 'sage' | 'rust' | 'forest';
   icon: React.ReactNode;
   index: number;
-  hovered: boolean;
-  onHover: (enter: boolean) => void;
+  focused: boolean;
   onClick: () => void;
 }
 
@@ -18,7 +17,7 @@ const colorMap = {
   forest:      { dot: 'bg-indigo-400',   line: 'border-indigo-400/15', badge: 'bg-indigo-400/10 text-indigo-400' },
 };
 
-export function TimeSlot({ data, color, icon, index, hovered, onHover, onClick }: TimeSlotProps) {
+export function TimeSlot({ data, color, icon, index, focused, onClick }: TimeSlotProps) {
   const c = colorMap[color];
 
   return (
@@ -26,20 +25,15 @@ export function TimeSlot({ data, color, icon, index, hovered, onHover, onClick }
       <div className="flex gap-0">
         {/* Timeline */}
         <div className="relative flex flex-col items-center mr-5 shrink-0">
-          <div className={`w-[11px] h-[11px] rounded-full ${c.dot} ring-2 ring-surface z-10 transition-transform duration-250 ${hovered ? 'scale-150' : ''}`} />
+          <div className={`w-[11px] h-[11px] rounded-full ${c.dot} ring-2 ring-surface z-10 transition-transform duration-250 ${focused ? 'scale-150' : ''}`} />
           <div className={`w-px flex-1 border-l ${c.line} -mt-0.5`} />
         </div>
 
         {/* Card */}
-        <div
-          className="flex-1 pb-5 min-w-0 cursor-pointer"
-          onMouseEnter={() => onHover(true)}
-          onMouseLeave={() => onHover(false)}
-          onClick={onClick}
-        >
+        <div className="flex-1 pb-5 min-w-0 cursor-pointer" onClick={onClick}>
           <div className={`glass-card rounded-xl p-5 transition-all duration-250 ${
-            hovered
-              ? 'shadow-[0_4px_24px_rgba(245,158,11,0.08)] scale-[1.02] border-border-glow'
+            focused
+              ? 'shadow-[0_4px_24px_rgba(245,158,11,0.15)] border-amber/30 bg-white/[0.04]'
               : 'hover:border-border-glow'
           }`}>
             <div className="flex items-center gap-3 mb-3.5">
@@ -51,12 +45,19 @@ export function TimeSlot({ data, color, icon, index, hovered, onHover, onClick }
             <h4 className="font-display font-semibold text-[19px] text-void mb-3 tracking-tight">{data.title}</h4>
             <ul className="space-y-2.5">
               {data.activities.map((activity, i) => (
-                <li key={i} className={`flex items-start gap-3 text-[16px] leading-relaxed ${activity.notFound ? 'text-ghost' : 'text-muted'}`}>
-                  <span className={`mt-[7px] w-1.5 h-1.5 rounded-full shrink-0 ${activity.notFound ? 'bg-rose/20' : 'bg-amber/25'}`} />
+                <li key={i} className={`flex items-start gap-3 text-[16px] leading-relaxed ${
+                  activity.notFound ? 'text-ghost' : activity.status === 'unverified' ? 'text-amber/80' : 'text-muted'
+                }`}>
+                  <span className={`mt-[7px] w-1.5 h-1.5 rounded-full shrink-0 ${
+                    activity.notFound ? 'bg-rose/20' : activity.status === 'unverified' ? 'bg-amber/40' : 'bg-amber/25'
+                  }`} />
                   <span>
                     {activity.name}
                     {activity.notFound && (
                       <span className="text-[13px] text-ghost/70 ml-1.5">（未匹配到该地址）</span>
+                    )}
+                    {!activity.notFound && activity.status === 'unverified' && (
+                      <span className="text-[13px] text-amber/60 ml-1.5" title="AI 对此地址不太确定">（待确认）</span>
                     )}
                   </span>
                 </li>

@@ -2,16 +2,21 @@ import type { SelectedLocation } from '../types/itinerary';
 
 interface PlaceConfirmDialogProps {
   location: SelectedLocation;
+  dayCount: number;
+  onDayCountChange: (count: number) => void;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
-export function PlaceConfirmDialog({ location, onConfirm, onCancel }: PlaceConfirmDialogProps) {
+const MIN_DAYS = 1;
+const MAX_DAYS = 7;
+
+export function PlaceConfirmDialog({ location, dayCount, onDayCountChange, onConfirm, onCancel }: PlaceConfirmDialogProps) {
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-[3px] z-50 flex items-center justify-center p-4 animate-fadeIn">
       <div className="glass-panel rounded-3xl shadow-[0_24px_80px_rgba(0,0,0,0.6)] w-full max-w-sm overflow-hidden animate-scaleIn border-[rgba(255,255,255,0.08)]">
 
-        <div className="p-7 pb-4">
+        <div className="p-7 pb-5">
           <div className="flex items-center gap-3.5 mb-5">
             <div className="w-11 h-11 rounded-xl bg-amber-soft flex items-center justify-center">
               <svg className="w-5.5 h-5.5 text-amber" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -31,6 +36,33 @@ export function PlaceConfirmDialog({ location, onConfirm, onCancel }: PlaceConfi
           <p className="text-[12px] text-soft mt-2.5 ml-[55px] font-mono tracking-tight">
             {location.lat.toFixed(4)}, {location.lon.toFixed(4)}
           </p>
+
+          {/* Day count selector */}
+          <div className="mt-5 ml-[55px]">
+            <p className="text-[12px] text-muted mb-2.5 font-body">旅行天数</p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => dayCount > MIN_DAYS && onDayCountChange(dayCount - 1)}
+                disabled={dayCount <= MIN_DAYS}
+                className="w-9 h-9 rounded-xl glass-card flex items-center justify-center text-void hover:bg-white/[0.06] disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer active:scale-95"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
+                </svg>
+              </button>
+              <span className="w-12 text-center font-display font-bold text-[22px] text-void select-none">{dayCount}</span>
+              <button
+                onClick={() => dayCount < MAX_DAYS && onDayCountChange(dayCount + 1)}
+                disabled={dayCount >= MAX_DAYS}
+                className="w-9 h-9 rounded-xl glass-card flex items-center justify-center text-void hover:bg-white/[0.06] disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer active:scale-95"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+              <span className="text-[13px] text-muted ml-1 font-body">天</span>
+            </div>
+          </div>
         </div>
 
         <div className="px-7 pb-7 flex gap-3">
@@ -47,7 +79,7 @@ export function PlaceConfirmDialog({ location, onConfirm, onCancel }: PlaceConfi
             <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
-            生成一日攻略
+            生成{dayCount === 1 ? '一日' : dayCount === 2 ? '两日' : dayCount === 3 ? '三日' : `${dayCount}日`}攻略
           </button>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import type { ItineraryData } from '../types/itinerary';
+import type { MultiDayItinerary } from '../types/itinerary';
 import { parseItineraryResponse, generateFallbackItinerary } from '../utils/formatItinerary';
 
 const DEEPSEEK_API = 'https://api.deepseek.com/chat/completions';
@@ -11,7 +11,8 @@ function getApiKey(): string | null {
   return null;
 }
 
-const SYSTEM_PROMPT = `你是一个小红书（RED）旅行内容专家，擅长创作精美、实用的一天旅行攻略。你的攻略风格深受小红书用户喜爱，强调：
+function buildSystemPrompt(dayCount: number): string {
+  return `你是一个小红书（RED）旅行内容专家，擅长创作精美、实用的旅行攻略。你的攻略风格深受小红书用户喜爱，强调：
 
 1. 出片率高的打卡点（拍照好看的地方）
 2. 隐藏的小众店铺和本地人才知道的美食
@@ -19,65 +20,119 @@ const SYSTEM_PROMPT = `你是一个小红书（RED）旅行内容专家，擅长
 4. 生动有趣的描述，像朋友在分享经验
 5. 关注当下的热门趋势和季节性亮点
 
-请用中文回复。对于每个目的地，生成一个完整的一天行程（8:00-22:00），格式必须严格遵循 JSON schema。
+请用中文回复。为目的地生成一个完整的 **${dayCount} 天** 行程（每天 8:00-22:00），格式必须严格遵循 JSON schema。
 
-注意：每个活动只需提供真实、具体的真实地名（name）和交通方式（transport），不需要提供坐标，坐标由系统自动查询。
+重要：你正在为高德地图生成行程数据。为了确保前端能准确在地图上定位每个地点，请严格遵守以下规则：
+- 每个活动必须包含 name（官方全称）、city（城市名）、address（详细地址）
+- 地名必须是该地的真实官方全称，如"故宫博物院-午门"而非"故宫"
+- 禁止使用模糊词：如'附近'、'旁边'、'那个'、'周边'等
+- 如果你对某个地点的地址非常确定，标记 "status": "verified"；如果不完全确定，标记 "status": "unverified"
+- 不需要提供坐标（lat/lon），坐标由系统通过高德地图自动查询
 
 {
-  "locationName": "目的地名称",
-  "morning": {
-    "timeRange": "8:00 - 12:00",
-    "title": "上午主题",
-    "activities": [
-      { "name": "故宫博物院", "transport": "地铁1号线天安门东站" }
-    ]
-  },
-  "lunch": {
-    "timeRange": "12:00 - 13:30",
-    "title": "午餐推荐",
-    "activities": [
-      { "name": "四季民福烤鸭店", "transport": "步行5分钟" }
-    ]
-  },
-  "afternoon": {
-    "timeRange": "13:30 - 17:00",
-    "title": "下午主题",
-    "activities": [
-      { "name": "景山公园", "transport": "步行8分钟" }
-    ]
-  },
-  "dinner": {
-    "timeRange": "17:30 - 19:00",
-    "title": "晚餐推荐",
-    "activities": [
-      { "name": "南锣鼓巷小吃街", "transport": "地铁6号线南锣鼓巷站" }
-    ]
-  },
-  "evening": {
-    "timeRange": "19:00 - 22:00",
-    "title": "晚间主题",
-    "activities": [
-      { "name": "什刹海酒吧街", "transport": "步行10分钟" }
-    ]
-  },
+  "locationName": "目的地名称（城市+核心区域，如'北京市东城区'）",
+  "days": [
+    {
+      "dayTitle": "第一天主题，如'经典皇城线'",
+      "morning": {
+        "timeRange": "8:00 - 12:00",
+        "title": "上午主题",
+        "activities": [
+          {
+            "name": "故宫博物院-午门",
+            "city": "北京市",
+            "address": "东城区景山前街4号",
+            "transport": "地铁1号线天安门东站",
+            "status": "verified"
+          }
+        ]
+      },
+      "lunch": {
+        "timeRange": "12:00 - 13:30",
+        "title": "午餐推荐",
+        "activities": [
+          {
+            "name": "四季民福烤鸭店（故宫店）",
+            "city": "北京市",
+            "address": "东城区南池子大街32号",
+            "transport": "步行5分钟",
+            "status": "verified"
+          }
+        ]
+      },
+      "afternoon": {
+        "timeRange": "13:30 - 17:00",
+        "title": "下午主题",
+        "activities": [
+          {
+            "name": "景山公园-万春亭",
+            "city": "北京市",
+            "address": "西城区景山西街44号",
+            "transport": "步行8分钟",
+            "status": "verified"
+          }
+        ]
+      },
+      "dinner": {
+        "timeRange": "17:30 - 19:00",
+        "title": "晚餐推荐",
+        "activities": [
+          {
+            "name": "南锣鼓巷",
+            "city": "北京市",
+            "address": "东城区南锣鼓巷胡同",
+            "transport": "地铁6号线南锣鼓巷站",
+            "status": "verified"
+          }
+        ]
+      },
+      "evening": {
+        "timeRange": "19:00 - 22:00",
+        "title": "晚间主题",
+        "activities": [
+          {
+            "name": "什刹海",
+            "city": "北京市",
+            "address": "西城区什刹海",
+            "transport": "步行10分钟",
+            "status": "verified"
+          }
+        ]
+      }
+    }
+  ],
   "transportationTips": ["交通建议1", "交通建议2", "交通建议3"],
   "photoSpots": [
-    { "name": "打卡点名称", "description": "为什么值得拍", "tip": "拍摄技巧或最佳时间" }
+    {
+      "name": "故宫角楼",
+      "city": "北京市",
+      "address": "东城区故宫东角楼",
+      "description": "为什么值得拍",
+      "tip": "拍摄技巧或最佳时间",
+      "searchKeyword": "Forbidden City Corner Tower Beijing",
+      "status": "verified"
+    }
   ],
   "trendingNotes": ["小红书热门笔记风格点评1", "点评2"]
 }
 
 要求：
-- 每个时段 2-3 个具体活动，尽量选择该地真实存在的地点（景点、餐厅、街区等）
-- 地名必须具体、真实，包含标志性景点、知名餐厅、热门街区
+- days 数组长度必须为 ${dayCount}，每天有不同的 dayTitle 主题
+- 每天每个时段 2-3 个具体活动，尽量选择该地真实存在的地点（景点、餐厅、街区等）
+- 每个活动必须包含 name、city、address、status 四个字段
+- name 必须是官方全称，禁止使用简称或口语化名称
+- address 要尽可能详细，至少包含区级信息
+- status："verified" 表示你对地址很确定，"unverified" 表示不太确定
 - transport 字段说明到达方式（地铁X号线XX站 / 步行X分钟 / 打车约X分钟 / 公交X路）
-- photoSpots 至少 2-3 个
+- photoSpots 至少 2-3 个，每个必须包含 name、city、address、searchKeyword、status 字段
+- searchKeyword 为该地点的标准英文名称，如 "West Lake Hangzhou"
 - transportationTips 至少 2 条
 - trendingNotes 至少 2 条带小红书风格的点评
 - 所有内容用中文
 - 只返回 JSON，不要其他文字`;
+}
 
-export async function generateItinerary(locationName: string, lat: number, lon: number): Promise<ItineraryData> {
+export async function generateItinerary(locationName: string, lat: number, lon: number, dayCount: number): Promise<MultiDayItinerary> {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error('NO_API_KEY');
 
@@ -90,14 +145,14 @@ export async function generateItinerary(locationName: string, lat: number, lon: 
     body: JSON.stringify({
       model: 'deepseek-chat',
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: buildSystemPrompt(dayCount) },
         {
           role: 'user',
-          content: `请为以下目的地生成一天旅行攻略（8:00-22:00），每个活动给出真实具体的地名：\n\n目的地：${locationName}\n坐标：${lat.toFixed(4)}, ${lon.toFixed(4)}`,
+          content: `请为以下目的地生成 ${dayCount} 天旅行攻略（每天 8:00-22:00），每个活动给出真实具体的地名：\n\n目的地：${locationName}\n坐标：${lat.toFixed(4)}, ${lon.toFixed(4)}`,
         },
       ],
       response_format: { type: 'json_object' },
-      max_tokens: 4096,
+      max_tokens: 8192,
       temperature: 0.7,
     }),
   });
@@ -120,21 +175,21 @@ export function hasApiKey(): boolean {
 export async function generateItinerarySafe(
   locationName: string,
   lat: number,
-  lon: number
-): Promise<ItineraryData> {
+  lon: number,
+  dayCount: number,
+): Promise<MultiDayItinerary> {
   try {
-    return await generateItinerary(locationName, lat, lon);
+    return await generateItinerary(locationName, lat, lon, dayCount);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg === 'NO_API_KEY') {
       throw new Error('NO_API_KEY');
     }
-    // Auth errors → re-throw so UI can show API key modal
     if (msg.includes('401') || msg.includes('invalid') || msg.includes('Authentication')) {
       throw new Error('NO_API_KEY');
     }
     console.warn('AI generation failed, using fallback:', msg);
-    return generateFallbackItinerary(locationName);
+    return generateFallbackItinerary(locationName, dayCount);
   }
 }
 
@@ -145,14 +200,17 @@ const CHAT_SYSTEM_PROMPT = `你是一个小红书旅行规划助手，你的任�
 2. 然后输出完整的修改后 JSON，用 \`\`\`json 代码块包裹
 
 注意：
-- 保持 JSON 结构完整，包含所有时段（morning/lunch/afternoon/dinner/evening）
-- 每个活动只需提供 name 和 transport，不需要坐标
+- 保持 JSON 结构完整，包含所有天（days 数组）和所有时段（morning/lunch/afternoon/dinner/evening）
+- 每个活动必须包含 name、city、address、status、transport 字段
+- 地名必须是官方全称，address 尽可能详细（至少区级）
+- status："verified" 表示地址确定，"unverified" 表示不确定
+- 禁止使用模糊词如'附近'、'旁边'、'那个'等
 - photoSpots、transportationTips、trendingNotes 也要保持完整
-- 地名必须具体真实
 - 时段时间范围可以调整但保持合理
+- days 数组长度保持不变
 
 回复格式示例：
-好的！我已经把午餐换成你想要的火锅店，下午增加了一个艺术馆～
+好的！我已经把第二天的午餐换成你想要的火锅店～
 
 \`\`\`json
 { ... 完整JSON ... }
@@ -188,7 +246,7 @@ export async function chatModifyItinerary(
     body: JSON.stringify({
       model: 'deepseek-chat',
       messages,
-      max_tokens: 4096,
+      max_tokens: 8192,
       temperature: 0.7,
     }),
   });

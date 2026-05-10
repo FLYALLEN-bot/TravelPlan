@@ -1,18 +1,19 @@
-import type { ItineraryData, ItineraryStatus, SelectedLocation } from '../types/itinerary';
+import type { MultiDayItinerary, ItineraryStatus, SelectedLocation } from '../types/itinerary';
 import { TimeSlot } from './TimeSlot';
 import { PhotoSpotBadge } from './PhotoSpotBadge';
 import { ItinerarySkeleton } from './ItinerarySkeleton';
 import { ErrorBanner } from './ErrorBanner';
 
 interface ItineraryPanelProps {
-  itineraryData: ItineraryData | null;
+  itineraryData: MultiDayItinerary | null;
   status: ItineraryStatus;
   error: string | null;
   selectedLocation: SelectedLocation | null;
-  hoveredTimeSlot: string | null;
+  focusedTimeSlot: string | null;
+  activeDayIndex: number;
   onRetry: () => void;
   onReset: () => void;
-  onTimeSlotHover: (timeSlot: string | null) => void;
+  onDayChange: (dayIndex: number) => void;
   onTimeSlotFocus: (timeSlot: string | null) => void;
   onOpenChat: () => void;
 }
@@ -49,7 +50,8 @@ const timeSlotIcons = {
 };
 
 export function ItineraryPanel({
-  itineraryData, status, error, selectedLocation, hoveredTimeSlot, onRetry, onReset, onTimeSlotHover, onTimeSlotFocus, onOpenChat,
+  itineraryData, status, error, selectedLocation, focusedTimeSlot, activeDayIndex,
+  onRetry, onReset, onDayChange, onTimeSlotFocus, onOpenChat,
 }: ItineraryPanelProps) {
   const renderContent = () => {
     if (status === 'idle' && !itineraryData) {
@@ -64,7 +66,7 @@ export function ItineraryPanel({
           </div>
           <h3 className="font-display font-semibold text-[30px] text-void mb-4 tracking-tight">探索世界</h3>
           <p className="text-[16px] text-muted leading-relaxed max-w-[300px]">
-            在地图上<strong className="text-void font-semibold">点击任意位置</strong>，或搜索目的地，生成一日旅行攻略
+            在地图上<strong className="text-void font-semibold">点击任意位置</strong>，或搜索目的地，生成旅行攻略
           </p>
         </div>
       );
@@ -74,6 +76,9 @@ export function ItineraryPanel({
     if (status === 'error' && error) return <ErrorBanner message={error} showRetry onRetry={onRetry} />;
 
     if (itineraryData) {
+      const day = itineraryData.days[activeDayIndex];
+      const isMultiDay = itineraryData.days.length > 1;
+
       return (
         <div className="p-8 pb-10 overflow-y-auto h-full scrollbar-thin">
           {/* Header */}
@@ -82,19 +87,22 @@ export function ItineraryPanel({
               {itineraryData.locationName}
             </h3>
             <div className="flex items-center gap-3">
-              <span className="text-[15px] text-muted font-body">一日攻略</span>
+              <span className="text-[15px] text-muted font-body">
+                {isMultiDay
+                  ? `第${activeDayIndex + 1}天 · ${day.dayTitle}`
+                  : '一日攻略'}
+              </span>
               <span className="w-1.5 h-1.5 rounded-full bg-amber/25" />
               <span className="text-[15px] text-muted font-body italic">AI 策划</span>
             </div>
           </div>
 
-          {/* Time Slots */}
+          {/* Time Slots for active day */}
           <div>
             {slotKeys.map((key, i) => (
-              <TimeSlot key={key} data={itineraryData[key]} color={slotColorMap[i]} icon={timeSlotIcons[key]} index={i}
-                hovered={hoveredTimeSlot === key}
-                onHover={(enter) => onTimeSlotHover(enter ? key : null)}
-                onClick={() => onTimeSlotFocus(key)} />
+              <TimeSlot key={key} data={day[key]} color={slotColorMap[i]} icon={timeSlotIcons[key]} index={i}
+                focused={focusedTimeSlot === key}
+                onClick={() => onTimeSlotFocus(focusedTimeSlot === key ? null : key)} />
             ))}
           </div>
 
@@ -178,7 +186,7 @@ export function ItineraryPanel({
   return (
     <div className="w-[540px] min-w-[540px] h-full glass-panel border-l border-border shadow-[-8px_0_40px_rgba(0,0,0,0.3)] overflow-hidden flex flex-col">
       {/* Panel header */}
-      <div className="shrink-0 px-7 py-4.5 border-b border-border flex items-center justify-between">
+      <div className="shrink-0 px-7 py-3.5 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-amber flex items-center justify-center">
             <svg className="w-4.5 h-4.5 text-[#09090b]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -187,6 +195,26 @@ export function ItineraryPanel({
           </div>
           <span className="font-display font-semibold text-[16px] text-void tracking-tight">TravelPlan</span>
         </div>
+
+        {/* Day tabs */}
+        {itineraryData && itineraryData.days.length > 1 && (
+          <div className="flex items-center gap-1 bg-white/[0.03] rounded-xl p-1">
+            {itineraryData.days.map((_day, i) => (
+              <button
+                key={i}
+                onClick={() => onDayChange(i)}
+                className={`px-3.5 py-1.5 rounded-lg text-[13px] font-semibold transition-all duration-200 cursor-pointer font-body whitespace-nowrap ${
+                  activeDayIndex === i
+                    ? 'bg-amber text-[#09090b] shadow-[0_1px_4px_rgba(245,158,11,0.2)]'
+                    : 'text-muted hover:text-void hover:bg-white/[0.04]'
+                }`}
+              >
+                第{i + 1}天
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="flex items-center gap-2">
           {selectedLocation && status === 'success' && (
             <>

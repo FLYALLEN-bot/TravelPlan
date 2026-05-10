@@ -1,17 +1,17 @@
 import { useState, useRef, useEffect } from 'react';
-import type { ChatMessage, ItineraryData } from '../types/itinerary';
+import type { ChatMessage, MultiDayItinerary } from '../types/itinerary';
 import { chatModifyItinerary } from '../api/anthropic';
 import { parseItineraryResponse } from '../utils/formatItinerary';
 
 interface InlineChatBarProps {
-  itineraryData: ItineraryData;
+  itineraryData: MultiDayItinerary;
   messages: ChatMessage[];
   loading: boolean;
   expanded: boolean;
   onToggle: (open: boolean) => void;
   onSend: (msg: ChatMessage) => void;
   onSetLoading: (loading: boolean) => void;
-  onApplyItinerary: (itinerary: ItineraryData) => void;
+  onApplyItinerary: (itinerary: MultiDayItinerary) => void;
 }
 
 export function InlineChatBar({
@@ -46,12 +46,15 @@ export function InlineChatBar({
         content: m.text,
       }));
 
-      const clean = { ...itineraryData } as Record<string, unknown>;
-      delete clean.routeStops;
+      // Strip routeStops from each day before sending to AI
+      const clean = {
+        ...itineraryData,
+        days: itineraryData.days.map(({ routeStops, ...rest }) => rest),
+      } as Record<string, unknown>;
 
       const result = await chatModifyItinerary(clean, text, history);
 
-      let proposedItinerary: ItineraryData | null = null;
+      let proposedItinerary: MultiDayItinerary | null = null;
       if (result.itinerary) {
         try {
           proposedItinerary = parseItineraryResponse(JSON.stringify(result.itinerary));
@@ -59,24 +62,29 @@ export function InlineChatBar({
           console.warn('[Chat] strict parse failed, merging with current itinerary:', e);
           try {
             const ai = result.itinerary;
-            const merged = { ...itineraryData };
+            const merged: MultiDayItinerary = { ...itineraryData };
             if (typeof ai.locationName === 'string') merged.locationName = ai.locationName;
-            for (const key of (['morning', 'lunch', 'afternoon', 'dinner', 'evening'] as const)) {
-              const aiSlot = ai[key] as Record<string, unknown> | undefined;
-              if (aiSlot) {
-                if (typeof aiSlot.timeRange === 'string') merged[key].timeRange = aiSlot.timeRange;
-                if (typeof aiSlot.title === 'string') merged[key].title = aiSlot.title;
-                if (Array.isArray(aiSlot.activities)) {
-                  merged[key].activities = aiSlot.activities.map((a: unknown) => {
-                    if (typeof a === 'string') return { name: a };
-                    if (typeof a === 'object' && a !== null) {
-                      const obj = a as Record<string, unknown>;
-                      return { name: String(obj.name || ''), transport: typeof obj.transport === 'string' ? obj.transport : undefined };
+            if (Array.isArray(ai.days)) {
+              ai.days.forEach((aiDay: Record<string, unknown>, di: number) => {
+                if (!merged.days[di]) return;
+                for (const key of (['morning', 'lunch', 'afternoon', 'dinner', 'evening'] as const)) {
+                  const aiSlot = aiDay[key] as Record<string, unknown> | undefined;
+                  if (aiSlot) {
+                    if (typeof aiSlot.timeRange === 'string') merged.days[di][key].timeRange = aiSlot.timeRange;
+                    if (typeof aiSlot.title === 'string') merged.days[di][key].title = aiSlot.title;
+                    if (Array.isArray(aiSlot.activities)) {
+                      merged.days[di][key].activities = (aiSlot.activities as unknown[]).map((a: unknown) => {
+                        if (typeof a === 'string') return { name: a };
+                        if (typeof a === 'object' && a !== null) {
+                          const obj = a as Record<string, unknown>;
+                          return { name: String(obj.name || ''), transport: typeof obj.transport === 'string' ? obj.transport : undefined };
+                        }
+                        return { name: String(a) };
+                      });
                     }
-                    return { name: String(a) };
-                  });
+                  }
                 }
-              }
+              });
             }
             if (Array.isArray(ai.transportationTips)) merged.transportationTips = ai.transportationTips as string[];
             if (Array.isArray(ai.photoSpots)) merged.photoSpots = ai.photoSpots as typeof merged.photoSpots;

@@ -1,12 +1,13 @@
 import { useReducer, useCallback, useEffect, useState, useRef } from 'react';
-import { MapView } from './components/MapView';
+import { AMapView } from './components/AMapView';
 import { ItineraryPanel } from './components/ItineraryPanel';
 import { PlaceConfirmDialog } from './components/PlaceConfirmDialog';
 import { ApiKeyModal } from './components/ApiKeyModal';
 import { InlineChatBar } from './components/InlineChatBar';
-import type { AppState, AppAction, SelectedLocation, ItineraryData, ChatMessage } from './types/itinerary';
+import type { AppState, AppAction, SelectedLocation, MultiDayItinerary, ChatMessage } from './types/itinerary';
 import { generateItinerarySafe, hasApiKey } from './api/anthropic';
 import { enrichItineraryWithCoordinates } from './utils/formatItinerary';
+import { fetchAllPhotoImages } from './api/unsplash';
 
 const initialState: AppState = {
   selectedLocation: null,
@@ -14,13 +15,14 @@ const initialState: AppState = {
   status: 'idle',
   error: null,
   showConfirm: false,
-  hoveredTimeSlot: null,
   focusedTimeSlot: null,
   showChat: false,
   chatMessages: [],
   chatLoading: false,
   routeVersion: 0,
   routeLoading: false,
+  activeDayIndex: 0,
+  dayCount: 1,
 };
 
 function reducer(state: AppState, action: AppAction): AppState {
@@ -31,16 +33,29 @@ function reducer(state: AppState, action: AppAction): AppState {
       return { ...state, showConfirm: false };
     case 'CONFIRM_LOCATION':
       return { ...state, showConfirm: false, status: 'loading', error: null };
-    case 'SET_ITINERARY':
-      return { ...state, itineraryData: action.payload, status: 'success', error: null, routeVersion: state.routeVersion + 1, routeLoading: false };
+    case 'SET_ITINERARY': {
+      const prevSpots = state.itineraryData?.photoSpots;
+      const newData = action.payload;
+      // Only preserve imageUrls for the SAME itinerary (geocoding re-dispatch).
+      // If location changed, old photoSpots have different names → don't carry over.
+      if (prevSpots && newData.photoSpots) {
+        newData.photoSpots = newData.photoSpots.map((spot, i) => {
+          const prev = prevSpots[i];
+          const sameSpot = prev && prev.name === spot.name;
+          return {
+            ...spot,
+            imageUrl: spot.imageUrl || (sameSpot ? prev.imageUrl : undefined),
+          };
+        });
+      }
+      return { ...state, itineraryData: newData, status: 'success', error: null, routeVersion: state.routeVersion + 1, routeLoading: false };
+    }
     case 'SET_ERROR':
       return { ...state, status: 'error', error: action.payload };
     case 'RETRY':
       return { ...state, status: 'loading', error: null };
     case 'RESET':
       return { ...initialState, itineraryData: null };
-    case 'HOVER_TIME_SLOT':
-      return { ...state, hoveredTimeSlot: action.payload };
     case 'FOCUS_TIME_SLOT':
       return { ...state, focusedTimeSlot: action.payload };
     case 'TOGGLE_CHAT':
@@ -51,6 +66,17 @@ function reducer(state: AppState, action: AppAction): AppState {
       return { ...state, chatLoading: action.payload };
     case 'SET_ROUTE_LOADING':
       return { ...state, routeLoading: action.payload };
+    case 'SET_ACTIVE_DAY':
+      return { ...state, activeDayIndex: action.payload };
+    case 'UPDATE_PHOTO_IMAGE': {
+      if (!state.itineraryData) return state;
+      const newSpots = state.itineraryData.photoSpots.map((s, i) =>
+        i === action.payload.index ? { ...s, imageUrl: action.payload.imageUrl } : s
+      );
+      return { ...state, itineraryData: { ...state.itineraryData, photoSpots: newSpots } };
+    }
+    case 'SET_DAY_COUNT':
+      return { ...state, dayCount: action.payload };
     default:
       return state;
   }
@@ -82,19 +108,37 @@ export default function App() {
       const data = await generateItinerarySafe(
         state.selectedLocation.displayName,
         state.selectedLocation.lat,
-        state.selectedLocation.lon
+        state.selectedLocation.lon,
+        state.dayCount,
       );
-      dispatch({ type: 'SET_ITINERARY', payload: { ...data, routeStops: [...(data.routeStops || [])] } });
+      dispatch({ type: 'SET_ITINERARY', payload: data });
       dispatch({ type: 'SET_ROUTE_LOADING', payload: true });
 
       const { lat, lon } = state.selectedLocation;
+
+      // Background geocoding
       enrichItineraryWithCoordinates(data, lat, lon).then((enriched) => {
         if (mountedRef.current) {
-          dispatch({ type: 'SET_ITINERARY', payload: { ...enriched, routeStops: [...enriched.routeStops] } });
+          dispatch({ type: 'SET_ITINERARY', payload: enriched });
         }
       }).catch((err) => {
         console.warn('[Geocoding] failed:', err);
       });
+
+      // Background photo fetching
+      if (data.photoSpots && data.photoSpots.length > 0) {
+        fetchAllPhotoImages(data.locationName, data.photoSpots).then((imageUrls) => {
+          if (mountedRef.current) {
+            imageUrls.forEach((url, i) => {
+              if (url) {
+                dispatch({ type: 'UPDATE_PHOTO_IMAGE', payload: { index: i, imageUrl: url } });
+              }
+            });
+          }
+        }).catch((err) => {
+          console.warn('[Unsplash] photo fetch failed:', err);
+        });
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg === 'NO_API_KEY') {
@@ -107,15 +151,19 @@ export default function App() {
         dispatch({ type: 'SET_ERROR', payload: msg || '生成失败，请重试' });
       }
     }
-  }, [state.selectedLocation]);
+  }, [state.selectedLocation, state.dayCount]);
 
   const handleCancel = useCallback(() => dispatch({ type: 'CANCEL_SELECTION' }), []);
   const handleRetry = useCallback(() => { dispatch({ type: 'RETRY' }); handleConfirm(); }, [handleConfirm]);
   const handleReset = useCallback(() => dispatch({ type: 'RESET' }), []);
   const handleApiKeySet = useCallback(() => setShowApiKeyModal(false), []);
-  const handleTimeSlotHover = useCallback((timeSlot: string | null) => {
-    dispatch({ type: 'HOVER_TIME_SLOT', payload: timeSlot });
+  const handleDayChange = useCallback((dayIndex: number) => {
+    dispatch({ type: 'SET_ACTIVE_DAY', payload: dayIndex });
   }, []);
+  const handleDayCountChange = useCallback((count: number) => {
+    dispatch({ type: 'SET_DAY_COUNT', payload: count });
+  }, []);
+
   const handleTimeSlotFocus = useCallback((timeSlot: string | null) => {
     dispatch({ type: 'FOCUS_TIME_SLOT', payload: timeSlot });
   }, []);
@@ -132,7 +180,7 @@ export default function App() {
     dispatch({ type: 'SET_CHAT_LOADING', payload: loading });
   }, []);
 
-  const handleApplyChatItinerary = useCallback((data: ItineraryData) => {
+  const handleApplyChatItinerary = useCallback((data: MultiDayItinerary) => {
     if (!state.selectedLocation) return;
     dispatch({ type: 'TOGGLE_CHAT', payload: false });
     dispatch({ type: 'RETRY' });
@@ -141,14 +189,29 @@ export default function App() {
     const { lat, lon } = state.selectedLocation;
     enrichItineraryWithCoordinates(data, lat, lon).then((enriched) => {
       if (mountedRef.current) {
-        dispatch({ type: 'SET_ITINERARY', payload: { ...enriched, routeStops: [...enriched.routeStops] } });
+        dispatch({ type: 'SET_ITINERARY', payload: enriched });
       }
     }).catch((err) => {
       console.warn('[Geocoding] failed:', err);
       if (mountedRef.current) {
-        dispatch({ type: 'SET_ITINERARY', payload: { ...data, routeStops: [] } });
+        dispatch({ type: 'SET_ITINERARY', payload: data });
       }
     });
+
+    // Re-fetch photos for the new itinerary
+    if (data.photoSpots && data.photoSpots.length > 0) {
+      fetchAllPhotoImages(data.locationName, data.photoSpots).then((imageUrls) => {
+        if (mountedRef.current) {
+          imageUrls.forEach((url, i) => {
+            if (url) {
+              dispatch({ type: 'UPDATE_PHOTO_IMAGE', payload: { index: i, imageUrl: url } });
+            }
+          });
+        }
+      }).catch((err) => {
+        console.warn('[Unsplash] photo fetch failed:', err);
+      });
+    }
   }, [state.selectedLocation]);
 
   return (
@@ -156,13 +219,13 @@ export default function App() {
       {/* Map area with inline chat */}
       <div className="flex-1 min-w-0 relative flex flex-col">
         <div className="flex-1 relative">
-          <MapView
+          <AMapView
             selectedLocation={state.selectedLocation}
             itineraryData={state.itineraryData}
-            hoveredTimeSlot={state.hoveredTimeSlot}
             focusedTimeSlot={state.focusedTimeSlot}
             routeVersion={state.routeVersion}
             routeLoading={state.routeLoading}
+            activeDayIndex={state.activeDayIndex}
             onLocationSelect={handleLocationSelect}
           />
         </div>
@@ -187,10 +250,11 @@ export default function App() {
         status={state.status}
         error={state.error}
         selectedLocation={state.selectedLocation}
-        hoveredTimeSlot={state.hoveredTimeSlot}
+        focusedTimeSlot={state.focusedTimeSlot}
+        activeDayIndex={state.activeDayIndex}
         onRetry={handleRetry}
         onReset={handleReset}
-        onTimeSlotHover={handleTimeSlotHover}
+        onDayChange={handleDayChange}
         onTimeSlotFocus={handleTimeSlotFocus}
         onOpenChat={() => handleToggleChat(true)}
       />
@@ -198,6 +262,8 @@ export default function App() {
       {state.showConfirm && state.selectedLocation && (
         <PlaceConfirmDialog
           location={state.selectedLocation}
+          dayCount={state.dayCount}
+          onDayCountChange={handleDayCountChange}
           onConfirm={handleConfirm}
           onCancel={handleCancel}
         />
