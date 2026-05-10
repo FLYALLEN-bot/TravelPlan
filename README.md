@@ -70,7 +70,7 @@ src/
 │   ├── anthropic.ts       # DeepSeek AI 行程生成（多日 JSON 格式）
 │   └── unsplash.ts        # 打卡点图片（高德 POI → Unsplash 级联回退）
 ├── components/
-│   ├── AMapView.tsx       # 高德地图容器（暗色主题、SVG 标记、路线绘制）
+│   ├── AMapView.tsx       # 高德地图容器（暗色主题、SVG 标记、橙色 InfoWindow、路线绘制、z-index 隔离）
 │   ├── ItineraryPanel.tsx # 右侧攻略面板（天切换标签、时段卡片、贴士）
 │   ├── TimeSlot.tsx       # 时段卡片组件
 │   ├── PhotoSpotBadge.tsx # 打卡点卡片（实景图片 / 渐变占位）
@@ -108,11 +108,13 @@ src/
 
 - **暗色 Luxe Noir 主题**：全局暗色配色，地图暗色风格，微妙的边框光效
 - **中文排版友好**：Noto Sans SC + Noto Serif SC 字体组合，适合中文阅读
-- **SVG 描边标记**：地图标记使用 `paint-order: stroke fill` 保证文字清晰可读
+- **橙色警示 InfoWindow**：高饱和 #FF6A00 背景 + 纯黑加粗文字 + 白色投影，任何底图（含深色卫星图）清晰可见；自带三角箭头、黑色描边、立体阴影
+- **SVG 描边标记**：地图标记使用 `paint-order: stroke fill` 保证文字在任何底图上清晰可读
 - **多源图片回退**：打卡点图片高德 POI → Unsplash → 渐变占位
 - **NaN 全链路防御**：所有地图坐标操作前 `isFinite()` 校验，防止黑屏崩溃
 - **智能地理编码**：AI 输出 city + address 字段，多策略级联提升编码精度
-- **多日行程**：支持 1-7 天行程生成，天切换标签实时更换地图路线
+- **多日行程**：1-7 天自由选择，天切换标签实时更换地图路线
+- **层叠上下文隔离**：地图容器与侧栏使用 `isolation: isolate`，InfoWindow 高 z-index 严格限定在地图内部，永不污染全局布局
 
 ## License
 
