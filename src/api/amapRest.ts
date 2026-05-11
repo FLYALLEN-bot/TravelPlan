@@ -6,6 +6,8 @@
  * 控制台：https://console.amap.com/dev/key/app
  */
 
+import { parseLocation } from '../utils/geo';
+
 const KEY = import.meta.env.VITE_AMAP_WS_KEY as string;
 const BASE = 'https://restapi.amap.com/v3';
 
@@ -51,16 +53,16 @@ interface RegeoResult {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function parseLoc(loc: string): { lat: number; lon: number } | null {
-  if (!loc || !loc.includes(',')) return null;
-  const [lng, lat] = loc.split(',').map(Number);
-  if (isNaN(lng) || isNaN(lat)) return null;
-  return { lat, lon: lng };
-}
-
 let _wsKeyWarning = false;
 
 async function get<T>(path: string, params: Record<string, string>): Promise<T | null> {
+  if (!KEY) {
+    if (!_wsKeyWarning) {
+      _wsKeyWarning = true;
+      console.warn('[AMap REST] VITE_AMAP_WS_KEY 未配置，所有 API 调用将失败');
+    }
+    return null;
+  }
   const qs = new URLSearchParams({ key: KEY, ...params }).toString();
   const url = `${BASE}${path}?${qs}`;
   try {
@@ -122,7 +124,7 @@ export async function geocode(
   const data = await get<{ geocodes: GeocodeItem[] }>('/geocode/geo', params);
   if (!data?.geocodes?.length) return null;
   const g = data.geocodes[0];
-  const loc = parseLoc(g.location);
+  const loc = parseLocation(g.location);
   if (!loc) return null;
   return { ...loc, formattedAddress: g.formatted_address };
 }

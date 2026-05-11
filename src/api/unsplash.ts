@@ -4,6 +4,7 @@
  */
 
 import { searchPoiPhoto } from './amapRest';
+import { extractCity } from '../utils/geo';
 
 function getUnsplashKey(): string | null {
   const envKey = import.meta.env.VITE_UNSPLASH_ACCESS_KEY;
@@ -13,15 +14,6 @@ function getUnsplashKey(): string | null {
 
 export function hasUnsplashKey(): boolean {
   return getUnsplashKey() !== null;
-}
-
-/**
- * Extract city name from locationName.
- * "重庆市渝中区" → "重庆市", "成都市锦江区" → "成都市"
- */
-function extractCity(locationName: string): string {
-  const m = locationName.match(/^(.*?(?:市|省|自治区|特别行政区))/);
-  return m ? m[1] : locationName;
 }
 
 async function tryUnsplash(accessKey: string, query: string): Promise<string | null> {

@@ -1,5 +1,6 @@
 import type { MultiDayItinerary } from '../types/itinerary';
-import { parseItineraryResponse, generateFallbackItinerary } from '../utils/formatItinerary';
+import { parseItineraryResponse } from '../utils/formatItinerary';
+import { generateFallbackItinerary } from '../utils/fallbackItinerary';
 
 const DEEPSEEK_API = 'https://api.deepseek.com/chat/completions';
 

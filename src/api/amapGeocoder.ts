@@ -5,6 +5,7 @@
 
 import { regeo, geocode, textSearch } from './amapRest';
 import type { PoiItem } from './amapRest';
+import { haversineKm, cityMatches, parseLocation } from '../utils/geo';
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const API_DELAY = 150; // ms between AMap API calls to respect QPS limits
@@ -24,40 +25,6 @@ export async function reverseGeocode(lat: number, lon: number): Promise<string> 
 }
 
 /**
- * Haversine distance in km between two lat/lon points.
- */
-function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-/**
- * Check if a POI result's city matches the expected city.
- * Handles variations like "成都市" vs "成都", "重庆市" vs "重庆".
- */
-function cityMatches(expected: string, actual: string): boolean {
-  if (!expected || !actual) return false;
-  const norm = (s: string) => s.replace(/市$/, '').replace(/省$/, '').replace(/区$/, '').trim();
-  return norm(expected) === norm(actual);
-}
-
-/**
- * Extract lat/lon from a POI location string ("lng,lat").
- */
-function parsePoiLocation(loc: string): { lat: number; lon: number } | null {
-  if (!loc || !loc.includes(',')) return null;
-  const [lng, lat] = loc.split(',').map(Number);
-  if (!isFinite(lng) || !isFinite(lat)) return null;
-  return { lat, lon: lng };
-}
-
-/**
  * Pick the best POI from search results: prefer city match, then distance.
  * Returns null if all results are too far from center.
  */
@@ -70,7 +37,7 @@ function pickBestPoi(
   const candidates: { lat: number; lon: number; cityHit: boolean; dist: number }[] = [];
 
   for (const poi of pois) {
-    const parsed = parsePoiLocation(poi.location);
+    const parsed = parseLocation(poi.location);
     if (!parsed) continue;
     const dist = haversineKm(centerLat, centerLon, parsed.lat, parsed.lon);
     const cityHit = expectedCity ? cityMatches(expectedCity, poi.cityname || poi.pname) : false;

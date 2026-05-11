@@ -1,6 +1,6 @@
 # 🌍 TravelPlan — AI 旅行攻略生成器
 
-> ✨ 暗色主题大屏旅行规划工具。在地图上点击或搜索目的地，AI 自动生成小红书风格的多日旅行攻略，包含时段安排、路线绘制、打卡点推荐与实景图片。
+> ✨ Dashboard 风格旅行规划工具。在地图上点击或搜索目的地，AI 自动生成小红书风格的多日旅行攻略，包含时段安排、路线绘制、打卡点推荐与实景图片。
 
 ## 🛠 技术栈
 
@@ -53,42 +53,71 @@ npm run preview    # 本地预览生产版本
 
 ## 🎯 使用方式
 
-1. 📍 **选择目的地**：在地图上点击任意位置，或使用左上角搜索框输入地名
+1. 📍 **选择目的地**：在地图上点击任意位置，或使用搜索框输入地名
 2. ✅ **确认并选择天数**：弹窗确认地点名称，选择行程天数（1-7 天）
-3. 📋 **查看攻略**：右侧面板展示每天的时段安排、出行贴士、打卡推荐（含实景图片）
-4. 🗺 **交互地图**：点击地图上的编号标记查看地点详情；点击时段卡片聚焦对应区域
-5. 📌 **活动定位**：每个有坐标的活动旁都有定位图标，点击即可在地图上精确定位并弹出详情
-6. 💬 **AI 对话**：底部 QQ 风格聊天面板与 AI 对话，调整行程内容，支持快捷建议
+3. 📋 **查看攻略**：右侧面板以手风琴折叠展示每天的时段安排，展开查看活动详情
+4. 🗺 **交互地图**：点击地图上的编号标记查看地点详情；点击活动行的地图图标定位到该地点
+5. 💬 **AI 对话**：右侧面板底部 QQ 风格聊天面板与 AI 对话，调整行程内容
+
+## 📐 界面布局
+
+```
+┌─────────────────────────────────────────────────────┐
+│  🏷 TravelPlan  │  📍 目的地名  │ [第1天][第2天] │ 🤖AI │ 🔄重置 │ ✅Ready │  ← 顶栏导航
+├──────────────────────────┬──────────────────────────┤
+│                          │  ☀️ 上午  8:00-12:00  ▾  │
+│                          │  🍜 午餐  12:00-13:30 ▸  │
+│       🗺 高德地图         │  🏛 下午  13:30-17:00 ▸  │
+│    （全功能交互地图）       │  🔥 晚餐  17:30-19:00 ▸  │
+│                          │  🌙 晚间  19:00-22:00 ▸  │
+│                          │  ─── 快速统计 ──────────  │
+│                          │  📸 打卡推荐  💡 出行贴士  │
+│                          │  ─────────────────────── │
+│                          │  💬 AI 聊天面板           │
+└──────────────────────────┴──────────────────────────┘
+```
+
+- 🖥 **顶栏**（52px）：Logo + 目的地名称 + Day 切换标签 + AI/重置按钮 + Ready 状态
+- 🗺 **地图区**（flex）：全功能高德地图，支持点击选点、搜索、路线绘制、InfoWindow
+- 📋 **右侧面板**（420px）：手风琴折叠时段 + 快速统计 + 打卡推荐 + 出行贴士 + AI 聊天
 
 ## 📁 项目结构
 
 ```
 src/
 ├── api/
-│   ├── amap.ts            # 🗺 高德 JS API 加载器
-│   ├── amapRest.ts        # 🔍 高德 Web 服务端 REST API（搜索/地理编码/POI 图片）
-│   ├── amapGeocoder.ts    # 🧭 地理编码策略编排（POI 搜索 + 地址编码 + 距离验证）
-│   ├── anthropic.ts       # 🤖 DeepSeek AI 行程生成（多日 JSON 格式）
-│   └── unsplash.ts        # 🖼 打卡点图片（高德 POI → Unsplash 级联回退）
+│   ├── amap.ts              # 🗺 高德 JS API 加载器
+│   ├── amapRest.ts          # 🔍 高德 Web 服务端 REST API（搜索/地理编码/POI 图片）
+│   ├── amapGeocoder.ts      # 🧭 地理编码策略编排（POI 搜索 + 地址编码 + 距离验证）
+│   ├── anthropic.ts         # 🤖 DeepSeek AI 行程生成 + 聊天修改（多日 JSON 格式）
+│   └── unsplash.ts          # 🖼 打卡点图片（高德 POI → Unsplash 级联回退）
 ├── components/
-│   ├── AMapView.tsx        # 🗺 高德地图容器（暗色主题、SVG 标记、透明 InfoWindow、路线绘制）
-│   ├── ItineraryPanel.tsx  # 📋 右侧攻略面板（天切换标签、时段卡片、贴士）
-│   ├── TimeSlot.tsx        # ⏰ 时段卡片组件（含活动定位图标交互）
-│   ├── PhotoSpotBadge.tsx  # 📸 打卡点卡片（实景图片 / 渐变占位）
-│   ├── SearchBar.tsx       # 🔎 浮动搜索栏（REST API 自动补全）
+│   ├── AMapView.tsx          # 🗺 高德地图容器（暗色主题、SVG 标记、透明 InfoWindow、路线绘制）
+│   ├── ItineraryPanel.tsx    # 📋 右侧攻略面板（手风琴折叠时段、快速统计、贴士）
+│   ├── PhotoSpotBadge.tsx    # 📸 打卡点卡片（实景图片 / 渐变占位）
+│   ├── SearchBar.tsx         # 🔎 浮动搜索栏（REST API 自动补全）
 │   ├── PlaceConfirmDialog.tsx  # ✅ 地点确认 + 天数选择弹窗
 │   ├── InlineChatBar.tsx       # 💬 QQ 风格 AI 聊天面板（气泡动画、打字指示器）
 │   ├── ApiKeyModal.tsx         # 🔑 API Key 设置弹窗
 │   ├── ErrorBanner.tsx         # ⚠️ 错误提示横幅
 │   └── ItinerarySkeleton.tsx   # 💀 加载骨架屏
+├── hooks/
+│   ├── useAMapInit.ts        # 🗺 地图初始化 hook（SDK 加载 + 实例创建 + 生命周期）
+│   ├── useItineraryPipeline.ts # ⚡ 异步编排 hook（地理编码 + 图片获取，含竞态保护）
+│   └── useChatModify.ts      # 💬 聊天修改 hook（AI 调用 + 响应解析 + 行程合并）
 ├── types/
-│   ├── itinerary.ts       # 📝 核心类型（MultiDayItinerary, DayPlan, RouteStop 等）
-│   └── amap.d.ts          # 📝 高德 JS API 2.0 类型声明
+│   ├── itinerary.ts          # 📝 纯类型声明（MultiDayItinerary, DayPlan, RouteStop 等）
+│   └── amap.d.ts             # 📝 高德 JS API 2.0 类型声明
 ├── utils/
-│   └── formatItinerary.ts  # 🔄 AI 响应解析、地理编码充实、回退行程生成
-├── App.tsx                 # 🏠 根组件（useReducer 全局状态管理）
-├── index.css               # 🎨 Tailwind @theme 设计系统 + 全局样式
-└── main.tsx                # 🚪 入口
+│   ├── geo.ts                # 🌐 共享地理工具（extractCity, haversineKm, parseLocation）
+│   ├── validate.ts           # ✅ 运行时验证（isValidMultiDayItinerary）
+│   ├── formatItinerary.ts    # 🔄 AI 响应 JSON 解析 + 标准化
+│   ├── enrichItinerary.ts    # 🧭 地理编码编排（坐标充实 + routeStops 重建）
+│   ├── fallbackItinerary.ts  # 🔧 回退行程生成（AI 失败时的默认攻略）
+│   └── mapContent.ts         # 🎨 地图内容生成（SVG 标记 + InfoWindow HTML 纯函数）
+├── App.tsx                   # 🏠 根组件（Dashboard 布局：顶栏 + Grid + useReducer）
+├── index.css                 # 🎨 Tailwind @theme 设计系统 + 全局样式 + 动画
+└── main.tsx                  # 🚪 入口
 ```
 
 ## 🔄 数据流
@@ -99,11 +128,12 @@ src/
   → ✅ PlaceConfirmDialog 确认 + 选择天数
   → 🤖 DeepSeek API（JSON mode，生成 N 天行程）
   → 📋 parseItineraryResponse → dispatch SET_ITINERARY（面板立刻显示）
-  → ⚡ 后台并行：
+  → ⚡ useItineraryPipeline 后台并行：
      a. 🧭 enrichItineraryWithCoordinates（高德 POI 搜索 + 地址编码 + 距离验证）
      b. 🖼 fetchAllPhotoImages（高德 POI → Unsplash 获取打卡图片）
   → 🗺 每次 enrich 完成 dispatch SET_ITINERARY（地图路线更新）
-  → 📌 侧栏活动图标点击 → 地图 panTo 居中 + InfoWindow 弹出
+  → 📌 侧栏活动行点击地图图标 → 地图 panTo 居中 + InfoWindow 弹出
+  → 💬 底部聊天修改 → useChatModify → re-geocode → 回写
 ```
 
 ## 🧭 地理编码管线
@@ -131,11 +161,35 @@ AI 不产出坐标（LLM 会幻觉 lat/lon）。AI 输出 `name` + `city` + `add
 - 🔤 **图片关键词**：`photoSpots` 的 `searchKeyword` 为标准英文名称，用于 Unsplash 精确搜索
 - 🏷 **状态标记**：`verified` / `unverified` 标记 AI 对地址的确定程度
 
+## 🏗 架构设计
+
+### 📐 模块化拆分
+
+应用按职责拆分为独立模块，遵循单一职责原则：
+
+- 🪝 **hooks/** — 可复用的 React hooks，封装地图初始化、异步编排、聊天逻辑
+- 🧰 **utils/** — 纯函数工具模块：地理工具、验证、解析、内容生成
+- 🧩 **components/** — UI 组件，仅负责渲染，业务逻辑通过 hooks 注入
+
+### 🔗 共享工具层
+
+- 🌐 `geo.ts` — 跨模块共享的地理函数（`extractCity`, `haversineKm`, `cityMatches`, `parseLocation`）
+- ✅ `validate.ts` — 运行时类型守卫，与纯类型声明分离
+- 🎨 `mapContent.ts` — 地图标记/InfoWindow 的 HTML+SVG 纯函数，分离内容生成与地图 API 逻辑
+
+### ⚡ 异步编排
+
+- 🔄 `useItineraryPipeline` — 封装地理编码 + 图片获取的共享管线，内置竞态保护（requestId 模式）
+- 💬 `useChatModify` — 封装 AI 对话调用 + 响应解析 + 行程合并逻辑
+- 🗺 `useAMapInit` — 封装地图 SDK 加载 + 实例创建 + 清理
+
 ## ✨ 设计特点
 
 - 🌑 **暗色 Luxe Noir 主题**：全局暗色配色，地图暗色风格，微妙的边框光效
 - 🀄 **中文排版友好**：Noto Sans SC + Noto Serif SC 字体组合，适合中文阅读
-- 🟠 **透明橙色 InfoWindow**：`rgba(255,106,0,0.45)` 半透明背景 + `backdrop-filter: blur(16px)` 毛玻璃效果，任何底图清晰可见且不遮挡地图；右上角 × 关闭按钮；三角箭头、白色文字 + 投影
+- 🖥 **Dashboard 网格布局**：顶部导航栏 + CSS Grid（地图 | 面板），信息密度高且层次清晰
+- 🪗 **手风琴折叠时段**：时间段默认折叠显示摘要，点击展开查看完整活动列表，节省屏幕空间
+- 🟠 **透明橙色 InfoWindow**：`rgba(255,106,0,0.45)` 半透明背景 + `backdrop-filter: blur(16px)` 毛玻璃效果
 - 🔢 **SVG 描边标记**：地图标记使用 `paint-order: stroke fill` 保证文字在任何底图上清晰可读
 - 📌 **活动独立定位**：每个有坐标的活动旁显示定位图标，点击后地图 `panTo` 平滑居中并弹出详情窗
 - 💬 **QQ 风格 AI 聊天**：气泡动画（弹性缩放入场）、打字指示器（三点弹跳）、渐变发送按钮、快捷建议标签

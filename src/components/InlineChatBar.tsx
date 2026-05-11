@@ -1,7 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import type { ChatMessage, MultiDayItinerary } from '../types/itinerary';
-import { chatModifyItinerary } from '../api/anthropic';
-import { parseItineraryResponse } from '../utils/formatItinerary';
+import { useChatModify } from '../hooks/useChatModify';
 
 interface InlineChatBarProps {
   itineraryData: MultiDayItinerary;
@@ -20,6 +19,15 @@ export function InlineChatBar({
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const loadingRef = useRef(loading);
+  loadingRef.current = loading;
+
+  const { updateRefs, sendMessage } = useChatModify();
+
+  // Keep hook refs in sync
+  useEffect(() => {
+    updateRefs(messages, itineraryData);
+  }, [messages, itineraryData, updateRefs]);
 
   useEffect(() => {
     if (expanded) {
@@ -35,9 +43,9 @@ export function InlineChatBar({
     }
   }, [messages, loading]);
 
-  const handleSend = async () => {
+  const handleSend = useCallback(async () => {
     const text = input.trim();
-    if (!text || loading) return;
+    if (!text || loadingRef.current) return;
     setInput('');
 
     const userMsg: ChatMessage = { role: 'user', text };
@@ -45,68 +53,15 @@ export function InlineChatBar({
     onSetLoading(true);
 
     try {
-      const history = messages.map((m) => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.text,
-      }));
-
-      const clean = {
-        ...itineraryData,
-        days: itineraryData.days.map(({ routeStops, ...rest }) => rest),
-      } as Record<string, unknown>;
-
-      const result = await chatModifyItinerary(clean, text, history);
-
-      let proposedItinerary: MultiDayItinerary | null = null;
-      if (result.itinerary) {
-        try {
-          proposedItinerary = parseItineraryResponse(JSON.stringify(result.itinerary));
-        } catch (e) {
-          console.warn('[Chat] strict parse failed, merging with current itinerary:', e);
-          try {
-            const ai = result.itinerary;
-            const merged: MultiDayItinerary = { ...itineraryData };
-            if (typeof ai.locationName === 'string') merged.locationName = ai.locationName;
-            if (Array.isArray(ai.days)) {
-              ai.days.forEach((aiDay: Record<string, unknown>, di: number) => {
-                if (!merged.days[di]) return;
-                for (const key of (['morning', 'lunch', 'afternoon', 'dinner', 'evening'] as const)) {
-                  const aiSlot = aiDay[key] as Record<string, unknown> | undefined;
-                  if (aiSlot) {
-                    if (typeof aiSlot.timeRange === 'string') merged.days[di][key].timeRange = aiSlot.timeRange;
-                    if (typeof aiSlot.title === 'string') merged.days[di][key].title = aiSlot.title;
-                    if (Array.isArray(aiSlot.activities)) {
-                      merged.days[di][key].activities = (aiSlot.activities as unknown[]).map((a: unknown) => {
-                        if (typeof a === 'string') return { name: a };
-                        if (typeof a === 'object' && a !== null) {
-                          const obj = a as Record<string, unknown>;
-                          return { name: String(obj.name || ''), transport: typeof obj.transport === 'string' ? obj.transport : undefined };
-                        }
-                        return { name: String(a) };
-                      });
-                    }
-                  }
-                }
-              });
-            }
-            if (Array.isArray(ai.transportationTips)) merged.transportationTips = ai.transportationTips as string[];
-            if (Array.isArray(ai.photoSpots)) merged.photoSpots = ai.photoSpots as typeof merged.photoSpots;
-            if (Array.isArray(ai.trendingNotes)) merged.trendingNotes = ai.trendingNotes as string[];
-            proposedItinerary = merged;
-          } catch {
-            console.warn('[Chat] merge also failed, discarding');
-          }
-        }
-      }
-
-      onSend({ role: 'assistant', text: result.reply, proposedItinerary });
+      const result = await sendMessage(text);
+      onSend({ role: 'assistant', text: result.reply, proposedItinerary: result.proposedItinerary });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       onSend({ role: 'assistant', text: `抱歉，出了点问题：${msg}` });
     } finally {
       onSetLoading(false);
     }
-  };
+  }, [input, onSend, onSetLoading, sendMessage]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
