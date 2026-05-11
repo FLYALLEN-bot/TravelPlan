@@ -104,7 +104,10 @@ export async function textSearch(
   pageSize = 10,
 ): Promise<PoiItem[]> {
   const params: Record<string, string> = { keywords: keyword, offset: String(pageSize) };
-  if (city) params.city = city;
+  if (city) {
+    params.city = city;
+    params.citylimit = 'true';
+  }
   const data = await get<{ pois: PoiItem[] }>('/place/text', params);
   return data?.pois || [];
 }

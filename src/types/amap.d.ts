@@ -5,6 +5,7 @@ interface AMapInstance {
   destroy(): void;
   setCenter(center: [number, number]): void;
   setZoomAndCenter(zoom: number, center: [number, number]): void;
+  panTo(center: [number, number]): void;
   flyTo(center: [number, number], zoom?: number): void;
   setFitView(overlays?: AMapOverlay[], immediately?: boolean, avoid?: number[], maxZoom?: number): void;
   add(overlay: AMapOverlay | AMapOverlay[]): void;
@@ -115,6 +116,7 @@ declare namespace AMap {
     destroy(): void;
     setCenter(center: [number, number]): void;
     setZoomAndCenter(zoom: number, center: [number, number]): void;
+    panTo(center: [number, number]): void;
     flyTo(center: [number, number], zoom?: number): void;
     setFitView(overlays?: AMapOverlay[], immediately?: boolean, avoid?: number[], maxZoom?: number): void;
     add(overlay: AMapOverlay | AMapOverlay[]): void;

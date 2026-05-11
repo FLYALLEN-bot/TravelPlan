@@ -4,6 +4,15 @@ import { geocodePlace } from '../api/amapGeocoder';
 
 const slotKeys = ['morning', 'lunch', 'afternoon', 'dinner', 'evening'] as const;
 
+/**
+ * Extract city name from locationName (e.g., "重庆市渝中区解放碑" → "重庆市").
+ * Falls back to the full locationName if no city pattern is found.
+ */
+function extractCityName(locationName: string): string {
+  const m = locationName.match(/^(.*?(?:市|省|自治区|特别行政区))/);
+  return m ? m[1] : locationName;
+}
+
 function normalizeActivities(activities: unknown[]): Activity[] {
   return activities.map((a) => {
     if (typeof a === 'string') {
@@ -120,7 +129,10 @@ export async function enrichItineraryWithCoordinates(
   centerLat: number,
   centerLon: number,
 ): Promise<MultiDayItinerary> {
-  const locationName = data.locationName;
+  // Extract city name from locationName for geocoding context
+  // This ensures we always search within the user's selected city,
+  // even if the AI generates an incorrect city field.
+  const cityName = extractCityName(data.locationName);
 
   const queue: { dayIndex: number; slotKey: string; index: number; name: string; city?: string; address?: string }[] = [];
 
@@ -146,10 +158,11 @@ export async function enrichItineraryWithCoordinates(
     });
   }
 
-  console.log(`[Geocoding] starting ${queue.length} lookups across ${data.days.length} days`);
+  console.log(`[Geocoding] starting ${queue.length} lookups, city context: "${cityName}"`);
   let found = 0;
   for (const item of queue) {
-    const coords = await geocodePlace(item.name, locationName, centerLat, centerLon, item.city, item.address);
+    // Use AI's city if available, otherwise fall back to extracted city from locationName
+    const coords = await geocodePlace(item.name, cityName, centerLat, centerLon, item.city || cityName, item.address);
     if (coords) {
       if (item.slotKey === 'photo') {
         data.photoSpots[item.index].lat = coords.lat;

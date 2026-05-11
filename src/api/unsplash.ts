@@ -15,6 +15,15 @@ export function hasUnsplashKey(): boolean {
   return getUnsplashKey() !== null;
 }
 
+/**
+ * Extract city name from locationName.
+ * "重庆市渝中区" → "重庆市", "成都市锦江区" → "成都市"
+ */
+function extractCity(locationName: string): string {
+  const m = locationName.match(/^(.*?(?:市|省|自治区|特别行政区))/);
+  return m ? m[1] : locationName;
+}
+
 async function tryUnsplash(accessKey: string, query: string): Promise<string | null> {
   const url = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=5&orientation=landscape`;
   const res = await fetch(url, {
@@ -38,9 +47,12 @@ export async function searchPhoto(
   spotName: string,
   searchKeyword?: string,
 ): Promise<string | null> {
+  const city = extractCity(locationName);
+
   // ---- Strategy 1: AMap POI photos (native Chinese location data) ----
-  console.log(`[Photo] AMap search: "${spotName}"`);
-  const amapUrl = await searchPoiPhoto(spotName, locationName);
+  // Use city name only (not full locationName) for AMap textSearch city param
+  console.log(`[Photo] AMap search: "${spotName}" in "${city}"`);
+  const amapUrl = await searchPoiPhoto(spotName, city);
   if (amapUrl) {
     console.log(`[Photo] ✓ AMap found for "${spotName}"`);
     return amapUrl;
@@ -56,20 +68,18 @@ export async function searchPhoto(
   try {
     let result: string | null = null;
 
+    // searchKeyword is the most specific (e.g., "Hongyadong Chongqing")
     if (searchKeyword) {
       result = await tryUnsplash(accessKey, searchKeyword);
       if (result) return result;
-      result = await tryUnsplash(accessKey, `${searchKeyword} ${locationName}`);
-      if (result) return result;
     }
 
-    result = await tryUnsplash(accessKey, `${locationName} ${spotName}`);
+    // Combine spot name with city for better relevance
+    result = await tryUnsplash(accessKey, `${spotName} ${city}`);
     if (result) return result;
 
+    // Spot name alone
     result = await tryUnsplash(accessKey, spotName);
-    if (result) return result;
-
-    result = await tryUnsplash(accessKey, locationName);
     if (result) return result;
 
     return null;
@@ -83,7 +93,8 @@ export async function fetchAllPhotoImages(
   locationName: string,
   spots: { name: string; searchKeyword?: string }[],
 ): Promise<(string | null)[]> {
-  console.log(`[Photo] fetching ${spots.length} photos for "${locationName}"`);
+  const city = extractCity(locationName);
+  console.log(`[Photo] fetching ${spots.length} photos for "${city}" (from "${locationName}")`);
   return Promise.all(
     spots.map((spot) => searchPhoto(locationName, spot.name, spot.searchKeyword)),
   );

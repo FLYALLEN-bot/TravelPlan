@@ -60,26 +60,42 @@ export function AMapView({
     marker.setzIndex(999);
     activeMarkerIdx.current = stopIdx;
 
-    // Ensure marker is in view with room above for InfoWindow
-    try {
-      map.setFitView([marker], false, [200, 80, 80, 80]);
-    } catch { /* ignore */ }
-
     // Open InfoWindow
+    const uid = `iw-${Date.now()}-${stopIdx}`;
     iw.setContent(
-      `<div data-iw style="position:relative;background:#FF6A00;border:1px solid #000000;border-radius:8px;padding:12px;min-width:170px;box-shadow:0 4px 20px rgba(0,0,0,0.4);z-index:9999;">
-        <h4 style="font-family:'Noto Sans SC',system-ui,sans-serif;font-weight:800;font-size:15px;color:#000000;margin:0 0 6px;padding:0;text-shadow:0 1px 0 rgba(255,255,255,0.3);">${stop.name}</h4>
-        ${stop.time ? `<p style="color:#000000;font-size:12px;margin:0 0 4px;font-weight:700;text-shadow:0 1px 0 rgba(255,255,255,0.3);"><span style="font-weight:800;">时间</span> ${stop.time}</p>` : ''}
-        ${stop.transport ? `<p style="color:#000000;font-size:12px;margin:0;font-weight:700;text-shadow:0 1px 0 rgba(255,255,255,0.3);"><span style="font-weight:800;">交通</span> ${stop.transport}</p>` : ''}
-        <div style="position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:8px solid #FF6A00;"></div>
+      `<div data-iw id="${uid}" style="position:relative;background:rgba(255,106,0,0.45);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,0.2);border-radius:10px;padding:14px 36px 14px 14px;min-width:170px;box-shadow:0 4px 24px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.15);z-index:9999;">
+        <button data-iw-close="${uid}" style="position:absolute;top:8px;right:8px;width:22px;height:22px;border-radius:50%;border:none;background:rgba(0,0,0,0.3);color:#fff;font-size:14px;line-height:22px;text-align:center;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.15s;" onmouseenter="this.style.background='rgba(0,0,0,0.55)'" onmouseleave="this.style.background='rgba(0,0,0,0.3)'">&times;</button>
+        <h4 style="font-family:'Noto Sans SC',system-ui,sans-serif;font-weight:800;font-size:15px;color:#ffffff;margin:0 0 6px;padding:0;text-shadow:0 1px 3px rgba(0,0,0,0.6);">${stop.name}</h4>
+        ${stop.time ? `<p style="color:rgba(255,255,255,0.9);font-size:12px;margin:0 0 4px;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,0.5);"><span style="font-weight:800;">时间</span> ${stop.time}</p>` : ''}
+        ${stop.transport ? `<p style="color:rgba(255,255,255,0.9);font-size:12px;margin:0;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,0.5);"><span style="font-weight:800;">交通</span> ${stop.transport}</p>` : ''}
+        <div style="position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:8px solid rgba(255,106,0,0.45);"></div>
       </div>`
     );
     iw.open(map, [stop.lon, stop.lat]);
 
-    // Ensure InfoWindow wrapper stays on top within the map, without leaking to layout containers
+    // Center AFTER InfoWindow opens (iw.open triggers map adjustments that override prior centering)
     setTimeout(() => {
-      const el = document.querySelector('[data-iw]');
+      const center: [number, number] = [stop.lon, stop.lat];
+      try { map.panTo(center); } catch { /* ignore */ }
+
+      // Ensure InfoWindow wrapper stays on top within the map, without leaking to layout containers
+      const el = document.getElementById(uid);
       if (!el) return;
+
+      // Bind close button
+      const closeBtn = el.querySelector(`[data-iw-close="${uid}"]`);
+      if (closeBtn) {
+        closeBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          iw.close();
+          if (activeMarkerIdx.current >= 0) {
+            const prev = stopMarkersRef.current[activeMarkerIdx.current];
+            if (prev) prev.setzIndex(10 + activeMarkerIdx.current);
+            activeMarkerIdx.current = -1;
+          }
+          onActivityFocus(null);
+        });
+      }
       let p: HTMLElement | null = el as HTMLElement;
       for (let depth = 0; depth < 3 && p; depth++) {
         p.style.zIndex = '9999';
@@ -88,8 +104,8 @@ export function AMapView({
         const rect = p.getBoundingClientRect();
         if (rect.width >= window.innerWidth * 0.9 && rect.height >= window.innerHeight * 0.9) break;
       }
-    }, 0);
-  }, []);
+    }, 50);
+  }, [onActivityFocus]);
 
   // ---- INIT ----
   useEffect(() => {
