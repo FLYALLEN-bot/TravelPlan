@@ -1,17 +1,19 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { loadAMap } from '../api/amap';
 import { regeo } from '../api/amapRest';
-import type { SelectedLocation, MultiDayItinerary, RouteStop } from '../types/itinerary';
+import type { SelectedLocation, MultiDayItinerary, RouteStop, FocusedActivity } from '../types/itinerary';
 import { SearchBar } from './SearchBar';
 
 interface AMapViewProps {
   selectedLocation: SelectedLocation | null;
   itineraryData: MultiDayItinerary | null;
   focusedTimeSlot: string | null;
+  focusedActivity: FocusedActivity | null;
   routeVersion: number;
   routeLoading: boolean;
   activeDayIndex: number;
   onLocationSelect: (location: SelectedLocation) => void;
+  onActivityFocus: (focus: FocusedActivity | null) => void;
 }
 
 const slotColors: Record<string, string> = {
@@ -27,8 +29,8 @@ let _amapModule: any = null;
 function getAMap() { return _amapModule; }
 
 export function AMapView({
-  selectedLocation, itineraryData, focusedTimeSlot,
-  routeVersion, routeLoading, activeDayIndex, onLocationSelect,
+  selectedLocation, itineraryData, focusedTimeSlot, focusedActivity,
+  routeVersion, routeLoading, activeDayIndex, onLocationSelect, onActivityFocus,
 }: AMapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<AMapInstance | null>(null);
@@ -41,6 +43,53 @@ export function AMapView({
   const activeMarkerIdx = useRef(-1);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
+
+  // ---- FOCUS STOP MARKER (shared by click handler and sidebar focus) ----
+  const focusStopMarker = useCallback((stopIdx: number) => {
+    const map = mapRef.current;
+    const iw = infoWindowRef.current;
+    const marker = stopMarkersRef.current[stopIdx];
+    const stop = validStopsRef.current[stopIdx];
+    if (!map || !iw || !marker || !stop) return;
+
+    // zIndex management
+    if (activeMarkerIdx.current >= 0 && activeMarkerIdx.current !== stopIdx) {
+      const prev = stopMarkersRef.current[activeMarkerIdx.current];
+      if (prev) prev.setzIndex(10 + activeMarkerIdx.current);
+    }
+    marker.setzIndex(999);
+    activeMarkerIdx.current = stopIdx;
+
+    // Ensure marker is in view with room above for InfoWindow
+    try {
+      map.setFitView([marker], false, [200, 80, 80, 80]);
+    } catch { /* ignore */ }
+
+    // Open InfoWindow
+    iw.setContent(
+      `<div data-iw style="position:relative;background:#FF6A00;border:1px solid #000000;border-radius:8px;padding:12px;min-width:170px;box-shadow:0 4px 20px rgba(0,0,0,0.4);z-index:9999;">
+        <h4 style="font-family:'Noto Sans SC',system-ui,sans-serif;font-weight:800;font-size:15px;color:#000000;margin:0 0 6px;padding:0;text-shadow:0 1px 0 rgba(255,255,255,0.3);">${stop.name}</h4>
+        ${stop.time ? `<p style="color:#000000;font-size:12px;margin:0 0 4px;font-weight:700;text-shadow:0 1px 0 rgba(255,255,255,0.3);"><span style="font-weight:800;">时间</span> ${stop.time}</p>` : ''}
+        ${stop.transport ? `<p style="color:#000000;font-size:12px;margin:0;font-weight:700;text-shadow:0 1px 0 rgba(255,255,255,0.3);"><span style="font-weight:800;">交通</span> ${stop.transport}</p>` : ''}
+        <div style="position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:8px solid #FF6A00;"></div>
+      </div>`
+    );
+    iw.open(map, [stop.lon, stop.lat]);
+
+    // Ensure InfoWindow wrapper stays on top within the map, without leaking to layout containers
+    setTimeout(() => {
+      const el = document.querySelector('[data-iw]');
+      if (!el) return;
+      let p: HTMLElement | null = el as HTMLElement;
+      for (let depth = 0; depth < 3 && p; depth++) {
+        p.style.zIndex = '9999';
+        p = p.parentElement;
+        if (!p || p === document.body || p === document.documentElement) break;
+        const rect = p.getBoundingClientRect();
+        if (rect.width >= window.innerWidth * 0.9 && rect.height >= window.innerHeight * 0.9) break;
+      }
+    }, 0);
+  }, []);
 
   // ---- INIT ----
   useEffect(() => {
@@ -74,6 +123,9 @@ export function AMapView({
           if (prev) prev.setzIndex(10 + activeMarkerIdx.current);
           activeMarkerIdx.current = -1;
         }
+
+        // Clear sidebar activity focus
+        onActivityFocus(null);
 
         onLocationSelect({ lat, lon: lng, displayName: `${lat.toFixed(4)}, ${lng.toFixed(4)}` });
         regeo(lat, lng).then((addr) => {
@@ -181,7 +233,7 @@ export function AMapView({
     route.setMap(map);
     routePolyRef.current = route;
 
-    // Info window — offset downward so it stays visible when marker near top edge
+    // Info window
     const iw = new AM.InfoWindow({ offset: new AM.Pixel(0, -8), isCustom: true, zIndex: 9999 });
     infoWindowRef.current = iw;
 
@@ -190,7 +242,6 @@ export function AMapView({
     stops.forEach((s, i) => {
       const color = slotColors[s.timeSlot] || '#2dd4bf';
 
-      // SVG marker with paint-order stroke for clear text on any background
       const content = `<svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" viewBox="0 0 42 42">
         <defs>
           <filter id="ms-${i}">
@@ -211,48 +262,7 @@ export function AMapView({
         offset: new AM.Pixel(0, 0),
       });
 
-      marker.on('click', () => {
-        // zIndex: elevate clicked marker, reset previous
-        if (activeMarkerIdx.current >= 0 && activeMarkerIdx.current !== i) {
-          const prev = stopMarkersRef.current[activeMarkerIdx.current];
-          if (prev) prev.setzIndex(10);
-        }
-        marker.setzIndex(999);
-        activeMarkerIdx.current = i;
-
-        // Avoid: ensure marker is in viewable area with room above for InfoWindow
-        try {
-          map.setFitView([marker], false, [200, 80, 80, 80]);
-        } catch { /* ignore */ }
-
-        // InfoWindow
-        iw.setContent(
-          `<div data-iw style="position:relative;background:#FF6A00;border:1px solid #000000;border-radius:8px;padding:12px;min-width:170px;box-shadow:0 4px 20px rgba(0,0,0,0.4);z-index:9999;">
-            <h4 style="font-family:'Noto Sans SC',system-ui,sans-serif;font-weight:800;font-size:15px;color:#000000;margin:0 0 6px;padding:0;text-shadow:0 1px 0 rgba(255,255,255,0.3);">${s.name}</h4>
-            ${s.time ? `<p style="color:#000000;font-size:12px;margin:0 0 4px;font-weight:700;text-shadow:0 1px 0 rgba(255,255,255,0.3);"><span style="font-weight:800;">时间</span> ${s.time}</p>` : ''}
-            ${s.transport ? `<p style="color:#000000;font-size:12px;margin:0;font-weight:700;text-shadow:0 1px 0 rgba(255,255,255,0.3);"><span style="font-weight:800;">交通</span> ${s.transport}</p>` : ''}
-            <div style="position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:8px solid #FF6A00;"></div>
-          </div>`
-        );
-        iw.open(map, [s.lon, s.lat]);
-
-        // Ensure InfoWindow wrapper stays on top within the map, without leaking to layout containers
-        setTimeout(() => {
-          const el = document.querySelector('[data-iw]');
-          if (!el) return;
-          // Only touch the custom content and its immediate AMap wrapper (max 3 levels)
-          let p: HTMLElement | null = el as HTMLElement;
-          for (let depth = 0; depth < 3 && p; depth++) {
-            p.style.zIndex = '9999';
-            p = p.parentElement;
-            // Never touch body/html — they must not participate in map-internal stacking
-            if (!p || p === document.body || p === document.documentElement) break;
-            // Never touch full-viewport overlays (likely AMap panes, not InfoWindow wrappers)
-            const rect = p.getBoundingClientRect();
-            if (rect.width >= window.innerWidth * 0.9 && rect.height >= window.innerHeight * 0.9) break;
-          }
-        }, 0);
-      });
+      marker.on('click', () => focusStopMarker(i));
 
       marker.setMap(map);
       marker.setzIndex(10 + i);
@@ -266,7 +276,7 @@ export function AMapView({
         console.warn('[AMap] setFitView failed:', err);
       }
     }
-  }, [itineraryData, activeDayIndex, mapReady]);
+  }, [itineraryData, activeDayIndex, mapReady, focusStopMarker]);
 
   useEffect(() => {
     drawRoute();
@@ -301,6 +311,21 @@ export function AMapView({
       console.warn('[AMap] setCenter failed:', err);
     }
   }, [focusedTimeSlot, itineraryData, activeDayIndex, mapReady]);
+
+  // ---- FOCUS ACTIVITY (per-activity from sidebar) ----
+  useEffect(() => {
+    if (!focusedActivity) return;
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    const stops = validStopsRef.current;
+    const stopIdx = stops.findIndex(
+      (s) => s.timeSlot === focusedActivity.slotKey && s.activityIndex === focusedActivity.activityIndex,
+    );
+    if (stopIdx < 0) return;
+
+    focusStopMarker(stopIdx);
+  }, [focusedActivity, mapReady, focusStopMarker]);
 
   const handleSearchSelect = useCallback(
     (location: SelectedLocation) => { onLocationSelect(location); },

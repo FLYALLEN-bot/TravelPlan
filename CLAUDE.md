@@ -7,73 +7,92 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run dev       # Start dev server (Vite HMR on localhost:5173)
-npm run build     # TypeScript check + Vite production build
-npm run preview   # Preview production build locally
+npm run dev       # Vite HMR dev server → localhost:5173
+npm run build     # TypeScript check + Vite production build（构建失败不能提交）
+npm run preview   # 预览生产构建
 ```
 
-Use `cmd /c "npm run dev"` in PowerShell if execution policy blocks npm.
+PowerShell 执行策略限制时用 `cmd /c "npm run dev"`。
 
-## Architecture
+## 架构
 
-TravelPlan is a React 19 + TypeScript + Vite single-page app that generates one-day travel itineraries. User clicks a map → DeepSeek AI generates a Xiaohongshu-style itinerary → right panel shows time slots, photo spots, and tips → map renders the route with numbered markers.
+React 19 + TypeScript + Vite 单页应用，AI 生成小红书风格多日旅行攻略。
 
-**Stack**: React 19, Leaflet (react-leaflet v5), Tailwind CSS 4 (CSS-based config via `@theme`), DeepSeek API (OpenAI-compatible fetch), Nominatim (free geocoding).
+**技术栈**：高德地图 JS API 2.0（`@amap/amap-jsapi-loader`）、DeepSeek API（JSON 结构化输出）、高德 Web 服务端 REST API（搜索/地理编码/POI 图片）、Unsplash API（打卡点图片回退）、Tailwind CSS 4（CSS-based `@theme`）。
 
-### Data flow
+### 数据流
 
 ```
-Map click / Search select
-  → reverseGeocode (Nominatim) to get display name
-  → PlaceConfirmDialog asks user to confirm
-  → DeepSeek API call (system prompt: Xiaohongshu travel expert)
-  → parse JSON response → validate structure
-  → dispatch SET_ITINERARY (panel shown immediately, no coords yet)
-  → enrichItineraryWithCoordinates (Nominatim geocode each activity name)
-  → dispatch SET_ITINERARY again (map updates with real route stops)
+地图点击 / 搜索选择
+  → 高德 REST 逆地理编码（regeo）
+  → PlaceConfirmDialog 确认地点 + 选择天数（1-7 天）
+  → DeepSeek API（JSON mode，系统提示词要求 city/address/status 字段）
+  → parseItineraryResponse 校验 → dispatch SET_ITINERARY（面板立刻渲染，无坐标）
+  → 后台并行双管线：
+     a. enrichItineraryWithCoordinates — 高德地理编码所有活动地点（5 层级联策略）
+     b. fetchAllPhotoImages — 高德 POI 图片 → Unsplash 级联回退
+  → dispatch SET_ITINERARY（地图路线 + 图片逐步到位）
+  → 用户切换 Day Tab → SET_ACTIVE_DAY → 路线按 activeDayIndex 过滤
+  → 底部 InlineChatBar AI 对话修改 → re-geocode → 回写
 ```
 
-All shared state lives in `App.tsx` via `useReducer`. The reducer handles location selection, confirmation, API loading/error/success, time slot hover, and reset.
+全部状态在 `App.tsx` 的 `useReducer` 中管理（`AppState` + `AppAction`）。
 
-### Key TypeScript requirement
+### TypeScript 要求
 
-`tsconfig.app.json` has `verbatimModuleSyntax: true` — **all type-only imports must use `import type`** or they will fail the build. Write `import type { Foo } from './bar'` not `import { Foo } from './bar'` for types.
+`tsconfig.app.json` 有 `verbatimModuleSyntax: true` — **类型导入必须用 `import type`**，否则构建失败。写 `import type { Foo } from './bar'` 而非 `import { Foo } from './bar'`。
 
-### API layer
+### API 层
 
-- `src/api/anthropic.ts` — despite the filename, calls DeepSeek API (`api.deepseek.com/chat/completions`) with `response_format: { type: "json_object" }`. API key from `VITE_DEEPSEEK_API_KEY` env var or `localStorage('deepseek_api_key')`. If API fails with auth error, throws `NO_API_KEY` to trigger the setup modal; all other errors fall back to `generateFallbackItinerary`.
-- `src/api/nominatim.ts` — free OpenStreetMap geocoding (reverse + forward search + single-place geocode). **Rate limit: 1 req/s enforced by throttle**. All functions catch errors silently and return empty/fallback results.
+- **`src/api/anthropic.ts`** — 调用 DeepSeek API（`api.deepseek.com/chat/completions`），`response_format: { type: "json_object" }`。Key 来自 `VITE_DEEPSEEK_API_KEY` 或 `localStorage('deepseek_api_key')`。认证失败抛 `NO_API_KEY`，其他错误走 `generateFallbackItinerary`。
+- **`src/api/amap.ts`** — 高德 JS API 加载器（仅地图显示，不加载插件）。
+- **`src/api/amapRest.ts`** — 高德 Web 服务端 REST API 封装：`inputTips`（搜索）、`geocode`/`regeo`（地理编码）、`textSearch`（POI 搜索）、`searchPoiPhoto`（POI 图片）。Key 来自 `VITE_AMAP_WS_KEY`。
+- **`src/api/amapGeocoder.ts`** — 地理编码策略编排，5 层级联：city+address → city+name → context+name → name → 返回 null。
+- **`src/api/unsplash.ts`** — 打卡点图片：高德 POI 图片 → Unsplash 级联搜索 → 返回 null（UI 显示渐变占位）。Key 来自 `VITE_UNSPLASH_ACCESS_KEY`（可选）。
 
-### The geocoding pipeline
+### 地理编码管线
 
-The AI does NOT produce coordinates (LLMs hallucinate lat/lon). Instead:
-1. AI returns place names only (e.g., "故宫博物院", "四季民福烤鸭店")
-2. `enrichItineraryWithCoordinates` in `formatItinerary.ts` geocodes each name via Nominatim, sequentially
-3. Activities that resolve get real `lat`/`lon`; those that don't are skipped
-4. `routeStops` are rebuilt from activities that have coordinates
+AI **不**产出坐标（LLM 会幻觉 lat/lon）。AI 输出 `name` + `city` + `address` + `status`，地理编码由 `enrichItineraryWithCoordinates`（`formatItinerary.ts`）完成：
+1. 遍历每天的每个时段活动，调用 `geocodePlace`
+2. `geocodePlace` 用 5 层策略查高德 REST API
+3. 能解析的活动获得真实 `lat`/`lon`；不能的标记 `notFound: true`（UI 显示"未匹配"）
+4. `routeStops` 从有坐标的活动重建
+5. 全链路 `isFinite()` 守卫，NaN 坐标绝不进入地图
 
-If no routeStops are found, `RouteOverlay` returns null (no synthetic fallback waypoints).
+### 地图组件
 
-### Map components
+**`src/components/AMapView.tsx`** — 单文件包含全部地图逻辑：
+- 地图初始化（暗色主题 `amap://styles/dark`）
+- Pin marker（选中地点图钉）
+- Route stops：SVG 编号标记（`paint-order: stroke fill` 描边文字）、zIndex 管理（clicked=999, default=10+i）
+- InfoWindow：橙色警示主题（`#FF6A00`、纯黑文字、三角箭头、黑色描边），`isolation: isolate` 层叠隔离
+- 路线绘制（glow polyline + dashed line）
+- 时段聚焦：`focusedTimeSlot` → `setCenter`（平移不缩放）
+- 搜索栏：`src/components/SearchBar.tsx`，用 `amapRest.inputTips` 实现自动补全
 
-- `MapView.tsx` — Leaflet container with CartoDB light tiles. Contains three sub-controllers:
-  - `MapClickHandler` — captures click events for reverse geocoding
-  - `MapController` — flies to selected location on selection change
-  - `RouteFocusController` — flies to time-slot-specific stops on sidebar hover
-- `RouteOverlay.tsx` — renders Polyline (teal dashed + glow) and numbered Marker circles with Popup info windows. Markers scale up when their time slot is hovered in the sidebar.
-- `SearchBar.tsx` — floating search bar with autocomplete dropdown, debounced at 400ms
+### 右侧面板
 
-### Sidebar panel
+`ItineraryPanel.tsx` 渲染 `TimeSlot` 卡片（morning/lunch/afternoon/dinner/evening）+ 出行贴士 + 打卡推荐（`PhotoSpotBadge` 含图片/渐变占位）+ 热门笔记。天数 >1 时顶部显示 Day 切换 tab。点击卡片 → `onTimeSlotFocus` 聚焦地图。
 
-`ItineraryPanel.tsx` renders five `TimeSlot` cards (morning, lunch, afternoon, dinner, evening) in a vertical timeline layout, plus transportation tips, photo spots, and trending notes sections. Each `TimeSlot` has `onMouseEnter`/`onMouseLeave` that dispatch `HOVER_TIME_SLOT` to highlight the corresponding map markers.
+### 设计系统
 
-### Design system (Tailwind CSS 4)
+暗色 Luxe Noir 主题，定义在 `src/index.css` 的 `@theme` 中：
+- 底色：`#09090b` → `#121217`；强调色：amber `#f59e0b`
+- 字体：`font-display`（Playfair Display）、`font-body`（Noto Sans SC）、`font-serif`（Noto Serif SC）
+- 玻璃面板：`.glass-card`、`.glass-panel`（`backdrop-filter: blur()`）
+- 关键动画：`fadeInUp`、`fadeIn`
 
-Defined in `src/index.css` via `@theme`:
-- Colors: `void` (#18181b), `muted` (#71717a), `teal` (#0d9488), `teal-soft` (#f0fdfa), `ice` (#f8f9fa)
-- Fonts: `font-display` (Playfair Display), `font-body` (Inter)
-- Three glass utilities: `.glass` (62% opacity, blur-20), `.glass-strong` (78%, blur-28), `.glass-subtle` (40%, blur-14)
-- Custom animations: `fadeInUp`, `fadeIn`, `scaleIn`
-- Waypoint marker pulse animation in CSS
+### 层叠上下文隔离（重要）
 
-Leaflet zoom controls are restyled in CSS to match the glass aesthetic.
+地图容器和右侧栏使用 `isolation: isolate` 形成独立层叠上下文。InfoWindow 的高 z-index 严格限定在地图容器内部，永不泄漏到全局布局。修改 z-index 相关代码时必须注意此约束，否则会导致侧栏模糊或搜索栏消失。
+
+## .env 配置
+
+```bash
+VITE_DEEPSEEK_API_KEY=sk-xxx        # 必需
+VITE_AMAP_JS_KEY=xxx                # 必需（Web端 JS API）
+VITE_AMAP_WS_KEY=xxx                # 必需（Web服务端）
+VITE_UNSPLASH_ACCESS_KEY=xxx        # 可选（无则显示渐变占位）
+```
+
+高德 JS Key 需开通「Web端(JS API)」，Web 服务端 Key 需开通「Web服务 API」。

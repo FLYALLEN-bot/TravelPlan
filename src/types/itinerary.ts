@@ -51,6 +51,12 @@ export interface RouteStop {
   time: string;
   timeSlot: string;
   transport: string;
+  activityIndex: number;
+}
+
+export interface FocusedActivity {
+  slotKey: string;
+  activityIndex: number;
 }
 
 export interface DayPlan {
@@ -96,6 +102,7 @@ export interface AppState {
   error: string | null;
   showConfirm: boolean;
   focusedTimeSlot: string | null;
+  focusedActivity: FocusedActivity | null;
   showChat: boolean;
   chatMessages: ChatMessage[];
   chatLoading: boolean;
@@ -114,6 +121,7 @@ export type AppAction =
   | { type: 'RETRY' }
   | { type: 'RESET' }
   | { type: 'FOCUS_TIME_SLOT'; payload: string | null }
+  | { type: 'FOCUS_ACTIVITY'; payload: FocusedActivity | null }
   | { type: 'TOGGLE_CHAT'; payload: boolean }
   | { type: 'ADD_CHAT_MESSAGE'; payload: ChatMessage }
   | { type: 'SET_CHAT_LOADING'; payload: boolean }

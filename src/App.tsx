@@ -4,7 +4,7 @@ import { ItineraryPanel } from './components/ItineraryPanel';
 import { PlaceConfirmDialog } from './components/PlaceConfirmDialog';
 import { ApiKeyModal } from './components/ApiKeyModal';
 import { InlineChatBar } from './components/InlineChatBar';
-import type { AppState, AppAction, SelectedLocation, MultiDayItinerary, ChatMessage } from './types/itinerary';
+import type { AppState, AppAction, SelectedLocation, MultiDayItinerary, ChatMessage, FocusedActivity } from './types/itinerary';
 import { generateItinerarySafe, hasApiKey } from './api/anthropic';
 import { enrichItineraryWithCoordinates } from './utils/formatItinerary';
 import { fetchAllPhotoImages } from './api/unsplash';
@@ -16,6 +16,7 @@ const initialState: AppState = {
   error: null,
   showConfirm: false,
   focusedTimeSlot: null,
+  focusedActivity: null,
   showChat: false,
   chatMessages: [],
   chatLoading: false,
@@ -58,6 +59,8 @@ function reducer(state: AppState, action: AppAction): AppState {
       return { ...initialState, itineraryData: null };
     case 'FOCUS_TIME_SLOT':
       return { ...state, focusedTimeSlot: action.payload };
+    case 'FOCUS_ACTIVITY':
+      return { ...state, focusedActivity: action.payload };
     case 'TOGGLE_CHAT':
       return { ...state, showChat: action.payload, chatMessages: action.payload ? state.chatMessages : [] };
     case 'ADD_CHAT_MESSAGE':
@@ -168,6 +171,10 @@ export default function App() {
     dispatch({ type: 'FOCUS_TIME_SLOT', payload: timeSlot });
   }, []);
 
+  const handleActivityFocus = useCallback((focus: FocusedActivity | null) => {
+    dispatch({ type: 'FOCUS_ACTIVITY', payload: focus });
+  }, []);
+
   const handleToggleChat = useCallback((open: boolean) => {
     dispatch({ type: 'TOGGLE_CHAT', payload: open });
   }, []);
@@ -223,10 +230,12 @@ export default function App() {
             selectedLocation={state.selectedLocation}
             itineraryData={state.itineraryData}
             focusedTimeSlot={state.focusedTimeSlot}
+            focusedActivity={state.focusedActivity}
             routeVersion={state.routeVersion}
             routeLoading={state.routeLoading}
             activeDayIndex={state.activeDayIndex}
             onLocationSelect={handleLocationSelect}
+            onActivityFocus={handleActivityFocus}
           />
         </div>
 
@@ -251,11 +260,13 @@ export default function App() {
         error={state.error}
         selectedLocation={state.selectedLocation}
         focusedTimeSlot={state.focusedTimeSlot}
+        focusedActivity={state.focusedActivity}
         activeDayIndex={state.activeDayIndex}
         onRetry={handleRetry}
         onReset={handleReset}
         onDayChange={handleDayChange}
         onTimeSlotFocus={handleTimeSlotFocus}
+        onActivityFocus={handleActivityFocus}
         onOpenChat={() => handleToggleChat(true)}
       />
 

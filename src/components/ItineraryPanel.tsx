@@ -1,4 +1,4 @@
-import type { MultiDayItinerary, ItineraryStatus, SelectedLocation } from '../types/itinerary';
+import type { MultiDayItinerary, ItineraryStatus, SelectedLocation, FocusedActivity } from '../types/itinerary';
 import { TimeSlot } from './TimeSlot';
 import { PhotoSpotBadge } from './PhotoSpotBadge';
 import { ItinerarySkeleton } from './ItinerarySkeleton';
@@ -10,11 +10,13 @@ interface ItineraryPanelProps {
   error: string | null;
   selectedLocation: SelectedLocation | null;
   focusedTimeSlot: string | null;
+  focusedActivity: FocusedActivity | null;
   activeDayIndex: number;
   onRetry: () => void;
   onReset: () => void;
   onDayChange: (dayIndex: number) => void;
   onTimeSlotFocus: (timeSlot: string | null) => void;
+  onActivityFocus: (focus: FocusedActivity | null) => void;
   onOpenChat: () => void;
 }
 
@@ -50,8 +52,8 @@ const timeSlotIcons = {
 };
 
 export function ItineraryPanel({
-  itineraryData, status, error, selectedLocation, focusedTimeSlot, activeDayIndex,
-  onRetry, onReset, onDayChange, onTimeSlotFocus, onOpenChat,
+  itineraryData, status, error, selectedLocation, focusedTimeSlot, focusedActivity, activeDayIndex,
+  onRetry, onReset, onDayChange, onTimeSlotFocus, onActivityFocus, onOpenChat,
 }: ItineraryPanelProps) {
   const renderContent = () => {
     if (status === 'idle' && !itineraryData) {
@@ -101,8 +103,13 @@ export function ItineraryPanel({
           <div>
             {slotKeys.map((key, i) => (
               <TimeSlot key={key} data={day[key]} color={slotColorMap[i]} icon={timeSlotIcons[key]} index={i}
-                focused={focusedTimeSlot === key}
-                onClick={() => onTimeSlotFocus(focusedTimeSlot === key ? null : key)} />
+                focused={focusedTimeSlot === key || focusedActivity?.slotKey === key}
+                focusedActivityIndex={focusedActivity?.slotKey === key ? focusedActivity.activityIndex : null}
+                onClick={() => onTimeSlotFocus(focusedTimeSlot === key ? null : key)}
+                onActivityFocus={(actIdx) => {
+                  const isSame = focusedActivity?.slotKey === key && focusedActivity?.activityIndex === actIdx;
+                  onActivityFocus(isSame ? null : { slotKey: key, activityIndex: actIdx });
+                }} />
             ))}
           </div>
 

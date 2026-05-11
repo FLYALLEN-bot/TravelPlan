@@ -3,7 +3,10 @@
  * All coordinates are [lng, lat] internally, but functions return { lat, lon }.
  */
 
-import { regeo, geocode } from './amapRest';
+import { regeo, geocode, textSearch } from './amapRest';
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const API_DELAY = 150; // ms between AMap API calls to respect QPS limits
 
 export interface SearchResult {
   lat: number;
@@ -21,10 +24,9 @@ export async function reverseGeocode(lat: number, lon: number): Promise<string> 
 /**
  * Geocode a place name with optional city/address hints.
  * Strategies (tried in order):
- *   1. address directly (most precise — structured address from AI)
- *   2. address + name
- *   3. city + name (e.g. "北京 故宫博物院")
- *   4. name only
+ *   1. AI-provided structured address via /geocode/geo (most accurate for street addresses)
+ *   2. POI text search with city constraint via /place/text
+ *   3. POI text search without city via /place/text (broader)
  */
 export async function geocodePlace(
   name: string,
@@ -34,28 +36,40 @@ export async function geocodePlace(
   city?: string,
   address?: string,
 ): Promise<{ lat: number; lon: number } | null> {
-  // Strategy 1: AI-provided detailed address (highest accuracy)
+  const c = city || context;
+
+  // Strategy 1: AI-provided structured address (street address → /geocode/geo)
   if (address) {
-    let result = await geocode(address, city || context);
+    let result = await geocode(address, c);
     if (result) return { lat: result.lat, lon: result.lon };
+    await delay(API_DELAY);
+
     result = await geocode(address);
     if (result) return { lat: result.lat, lon: result.lon };
+    await delay(API_DELAY);
   }
 
-  // Strategy 2: city + name (e.g. "北京 故宫博物院")
-  const c = city || context;
-  let result = await geocode(`${c} ${name}`, c);
-  if (result) return { lat: result.lat, lon: result.lon };
-
-  // Strategy 3: context + name
-  if (city && context !== city) {
-    result = await geocode(`${context} ${name}`, context);
-    if (result) return { lat: result.lat, lon: result.lon };
+  // Strategy 2: POI text search with city constraint
+  // (/place/text is designed for POI names, unlike /geocode/geo which expects addresses)
+  let pois = await textSearch(name, c);
+  if (pois.length > 0) {
+    const loc = pois[0].location;
+    if (loc && loc.includes(',')) {
+      const [lng, lat] = loc.split(',').map(Number);
+      if (isFinite(lng) && isFinite(lat)) return { lat, lon: lng };
+    }
   }
+  await delay(API_DELAY);
 
-  // Strategy 4: name only
-  result = await geocode(name);
-  if (result) return { lat: result.lat, lon: result.lon };
+  // Strategy 3: POI text search without city (broader search)
+  pois = await textSearch(name);
+  if (pois.length > 0) {
+    const loc = pois[0].location;
+    if (loc && loc.includes(',')) {
+      const [lng, lat] = loc.split(',').map(Number);
+      if (isFinite(lng) && isFinite(lat)) return { lat, lon: lng };
+    }
+  }
 
   return null;
 }

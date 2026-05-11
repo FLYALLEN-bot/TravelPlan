@@ -32,7 +32,7 @@ function extractRouteStops(data: Record<string, unknown>, timeRanges: Record<str
     const slot = data[key] as Record<string, unknown> | undefined;
     if (!slot || !Array.isArray(slot.activities)) continue;
     const activities = slot.activities as unknown[];
-    activities.forEach((a) => {
+    activities.forEach((a, i) => {
       if (typeof a === 'object' && a !== null) {
         const obj = a as Record<string, unknown>;
         if (typeof obj.lat === 'number' && typeof obj.lon === 'number' && !isNaN(obj.lat) && !isNaN(obj.lon)) {
@@ -43,6 +43,7 @@ function extractRouteStops(data: Record<string, unknown>, timeRanges: Record<str
             time: timeRanges[key] || '',
             timeSlot: key,
             transport: typeof obj.transport === 'string' ? obj.transport : '',
+            activityIndex: i,
           });
         }
       }

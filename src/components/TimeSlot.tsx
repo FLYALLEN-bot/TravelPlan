@@ -6,7 +6,9 @@ interface TimeSlotProps {
   icon: React.ReactNode;
   index: number;
   focused: boolean;
+  focusedActivityIndex?: number | null;
   onClick: () => void;
+  onActivityFocus?: (activityIndex: number) => void;
 }
 
 const colorMap = {
@@ -17,7 +19,7 @@ const colorMap = {
   forest:      { dot: 'bg-indigo-400',   line: 'border-indigo-400/15', badge: 'bg-indigo-400/10 text-indigo-400' },
 };
 
-export function TimeSlot({ data, color, icon, index, focused, onClick }: TimeSlotProps) {
+export function TimeSlot({ data, color, icon, index, focused, focusedActivityIndex, onClick, onActivityFocus }: TimeSlotProps) {
   const c = colorMap[color];
 
   return (
@@ -48,9 +50,28 @@ export function TimeSlot({ data, color, icon, index, focused, onClick }: TimeSlo
                 <li key={i} className={`flex items-start gap-3 text-[16px] leading-relaxed ${
                   activity.notFound ? 'text-ghost' : activity.status === 'unverified' ? 'text-amber/80' : 'text-muted'
                 }`}>
-                  <span className={`mt-[7px] w-1.5 h-1.5 rounded-full shrink-0 ${
-                    activity.notFound ? 'bg-rose/20' : activity.status === 'unverified' ? 'bg-amber/40' : 'bg-amber/25'
-                  }`} />
+                  {/* Activity icon or dot */}
+                  {!activity.notFound && activity.lat != null && activity.lon != null ? (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onActivityFocus?.(i); }}
+                      className={`mt-[5px] shrink-0 w-5 h-5 flex items-center justify-center rounded-md transition-all duration-200 cursor-pointer ${
+                        focusedActivityIndex === i
+                          ? 'bg-amber/20 text-amber scale-110'
+                          : 'text-amber/40 hover:text-amber hover:bg-amber/10'
+                      }`}
+                      title="在地图上定位"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                      </svg>
+                    </button>
+                  ) : (
+                    <span className={`mt-[7px] w-1.5 h-1.5 rounded-full shrink-0 ${
+                      activity.notFound ? 'bg-rose/20' : activity.status === 'unverified' ? 'bg-amber/40' : 'bg-amber/25'
+                    }`} />
+                  )}
                   <span>
                     {activity.name}
                     {activity.notFound && (
